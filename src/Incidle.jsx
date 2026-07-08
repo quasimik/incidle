@@ -182,6 +182,18 @@ export default function Incidle() {
     settle([...feed, { type: "clue", time: eventTime(newActions.length), text: c.clues[revealed] }], newActions);
   }
 
+  // Hotkey: 0 investigates (1-9 confirm suggestions). Window-level so it works
+  // regardless of focus; re-registered each render to see fresh state.
+  useEffect(() => {
+    function onHotkey(e) {
+      if (e.key !== "0" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      handleInvestigate();
+    }
+    window.addEventListener("keydown", onHotkey);
+    return () => window.removeEventListener("keydown", onHotkey);
+  });
+
   function handleGuess(ans) {
     if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
     setQuery("");
@@ -334,7 +346,7 @@ export default function Incidle() {
       {!done && (
         <footer className="dock">
           <button className="btn btn-secondary btn-wide" onClick={handleInvestigate} disabled={revealed >= maxClues}>
-            Investigate <span className="btn-sub">(reveal a clue)</span>
+            <kbd className="key">0</kbd> Investigate <span className="btn-sub">(reveal a clue)</span>
           </button>
           <div className="dock-row">
             <div className="combo">
@@ -364,7 +376,7 @@ export default function Incidle() {
                           disabled={used}
                         >
                           <span className="opt-main">
-                            <span className="opt-num">{i + 1}</span>
+                            <kbd className="key">{i + 1}</kbd>
                             {a.name}
                             {used && <span className="used-note"> — rejected</span>}
                           </span>
@@ -490,7 +502,9 @@ const CSS = `
   position: relative;
 }
 .dock-row { display: flex; gap: 10px; align-items: flex-start; }
-.btn-wide { width: 100%; }
+.btn-wide {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
 .combo { position: relative; flex: 1; }
 .combo-input {
   width: 100%; padding: 11px 13px; border-radius: 7px;
@@ -513,8 +527,15 @@ const CSS = `
 .combo-opt:hover:not(:disabled) { background: rgba(107,213,232,.1); }
 .combo-opt-sel:not(:disabled) { background: rgba(107,213,232,.07); }
 .combo-opt-used { color: var(--muted); cursor: not-allowed; }
-.opt-main { display: flex; align-items: baseline; gap: 9px; }
-.opt-num { color: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; }
+.opt-main { display: flex; align-items: center; gap: 9px; }
+.key {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 19px; height: 19px; padding: 0 4px;
+  border-radius: 4px; background: var(--bg);
+  border: 1px solid var(--line); border-bottom-width: 3px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px;
+  color: var(--muted); vertical-align: middle;
+}
 .used-note { font-size: 12px; }
 .enter-hint { color: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; }
 
