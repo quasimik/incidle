@@ -37,9 +37,11 @@ const ANSWERS = [
 const answerById = Object.fromEntries(ANSWERS.map((a) => [a.id, a]));
 
 // ---------------------------------------------------------------------------
-// CASES — vignette free; each wrong guess or investigation reveals a clue.
-// Clue order mirrors real triage: symptom → metrics → recent changes → smoking gun.
-// nearIds get a "directionally right" response instead of a flat reject.
+// CASES — the paging vignette is free. Every action after that — revealing an
+// observation or testing a hypothesis (right or wrong) — burns one hour of the
+// HOURS budget. Unresolved at T+HOURS, the incident escalates.
+// Clue order mirrors real triage: symptom → metrics → changes → smoking gun.
+// nearIds get a "directionally right" response but still cost the hour.
 // ---------------------------------------------------------------------------
 const CASES = [
   {
@@ -52,29 +54,11 @@ const CASES = [
       "payments-svc looks fine: CPU and memory normal, zero restarts, latency on successful requests unchanged.",
       "Deploy log: promo-svc shipped 25 minutes ago. Different team. No shared code with payments.",
       "Postgres (payments db): active connections pinned at 500/500. Most are idle-in-transaction — owned by promo-svc.",
-      "promo-svc's new coupon-lookup path opens a transaction and returns early on a common branch without releasing it.",
     ],
     answerId: "connection-pool-exhaustion",
     nearIds: ["bad-deploy", "thread-pool"],
     postmortem:
       "promo-svc and payments-svc share a database. The new coupon path leaked connections (opened transactions, never closed), pinning the pool at max and starving payments-svc — which failed while looking perfectly healthy itself. Fix: roll back, add an idle-in-transaction timeout, and give each service its own pool with a hard cap.",
-  },
-  {
-    service: "orders ↔ inventory",
-    sev: 1,
-    start: "00:01",
-    vignette: "PAGE — orders-svc → inventory-svc calls failing 100%. Started at exactly 00:00 UTC.",
-    clues: [
-      "Failures are TLS handshake errors — requests never reach the application layer. No HTTP status at all.",
-      "No deploys in 3 days. No infra changes. Both services pass their own health checks.",
-      "It's not just orders-svc: every client of inventory-svc is failing. Its inbound traffic is near zero.",
-      "openssl s_client against inventory-svc: certificate NotAfter = today, 00:00 UTC.",
-      "The cert-rotation job has been failing silently for 90 days. Its alerts route to a Slack channel that was deleted.",
-    ],
-    answerId: "cert-expiry",
-    nearIds: ["expired-api-key", "config-typo"],
-    postmortem:
-      "The service's mTLS certificate expired at midnight — hence the perfectly sharp start time, the handshake-layer failures, and the absence of any recent change. Rotation had been broken for months with alerts going nowhere. Fix: renew, alert on cert lifetime remaining (not on job failure alone), and treat sharp midnight onsets as expiry until proven otherwise.",
   },
   {
     service: "product-page",
@@ -86,97 +70,11 @@ const CASES = [
       "During each spike the DB runs the same expensive query hundreds of times concurrently — the top-sellers aggregation.",
       "Redis is healthy overall, but the hit rate for one key drops to zero at each spike, then recovers.",
       "The top_sellers key: TTL 900 seconds, no jitter. Recomputing it takes about 8 seconds.",
-      "When the key expires, every request misses at once and all of them recompute in parallel until the first write lands.",
     ],
     answerId: "cache-stampede",
     nearIds: ["cache-eviction"],
     postmortem:
       "Classic stampede: a popular cache key expires on a fixed TTL, and every concurrent request recomputes the expensive value simultaneously, hammering the database until one write repopulates the key. Fix: TTL jitter, a recompute lock or single-flight, or serve-stale-while-revalidate.",
-  },
-  {
-    service: "search-svc",
-    sev: 2,
-    start: "11:47",
-    vignette: "PAGE — a 30-second network blip ended 10 minutes ago, but search-svc load is 8× normal and still climbing.",
-    clues: [
-      "Request rate arriving from clients vastly exceeds user traffic. Actual user traffic is flat.",
-      "Client logs: timeouts trigger immediate re-attempts — 3 per call, zero backoff.",
-      "Each search call fans out to 4 backend lookups, and those are retried on the same policy.",
-      "It's a loop: rising latency → more timeouts → more retries → more load → rising latency. Success rate is falling as load rises.",
-      "Load only returns to normal when someone manually disables retries at the gateway.",
-    ],
-    answerId: "retry-storm",
-    nearIds: ["ddos", "thread-pool"],
-    postmortem:
-      "The blip healed, but naive retries (immediate, no backoff, multiplied by fan-out) amplified residual load into a self-sustaining storm — a system-inflicted DDoS. Fix: exponential backoff with jitter, retry budgets, circuit breakers, and retry only at one layer of the stack.",
-  },
-  {
-    service: "recommendations",
-    sev: 3,
-    start: "09:20",
-    vignette: "PAGE — recommendations pods have been restarting every ~6 hours for two days, with a burst of 500s at each restart.",
-    clues: [
-      "Every restart has the same exit: OOMKilled, exit code 137.",
-      "Memory is a clean sawtooth: linear climb from 800MB to the 4GB limit, then reset on restart.",
-      "The climb rate tracks request volume, and the pattern began with Tuesday's deploy.",
-      "Heap dump: millions of retained embedding vectors, all reachable from one module-level list.",
-      "Tuesday's diff added an in-process 'cache' — a plain dict keyed by user ID, with no eviction and no size bound.",
-    ],
-    answerId: "memory-leak",
-    nearIds: ["gc-pause", "bad-deploy"],
-    postmortem:
-      "An unbounded in-process cache retained an entry per user forever, so memory grew linearly with traffic until the kernel OOM-killed the pod — the sawtooth is the signature. Fix: bounded cache with eviction (LRU + TTL), and alert on memory slope, not just on level.",
-  },
-  {
-    service: "events-pipeline",
-    sev: 2,
-    start: "16:33",
-    vignette: "PAGE — Kafka consumer lag at 40 minutes and growing, yet overall event throughput is below normal peak.",
-    clues: [
-      "Lag lives entirely on partition 7 of 32. Every other partition is near zero.",
-      "The consumer on partition 7 is pegged at 100% CPU. Adding consumers does nothing — one partition, one consumer, that's the ceiling.",
-      "The topic's partition key is user_id.",
-      "One single user_id accounts for 61% of all events in the last hour.",
-      "It belongs to a new enterprise customer's bulk-import bot — every one of its events hashes to partition 7.",
-    ],
-    answerId: "hot-partition",
-    nearIds: ["queue-backlog", "noisy-neighbor"],
-    postmortem:
-      "Partitioning by user_id concentrated one heavy producer's entire stream onto a single partition, and a partition is a serial unit — no amount of scaling helps. Fix: composite or salted keys for heavy tenants, per-tenant rate limits, and lag alerts per partition, not per topic.",
-  },
-  {
-    service: "media-uploads",
-    sev: 3,
-    start: "10:05",
-    vignette: "PAGE — about 2% of image uploads are failing. Retries sometimes succeed, which smells like one bad host.",
-    clues: [
-      "Confirmed: every failure traces to host web-14. The error: 'No space left on device'.",
-      "df on web-14: root volume 100% full. Peer hosts sit at ~40%.",
-      "du points at /var/log/app: 380GB — one access.log that hasn't rolled in months.",
-      "logrotate config exists, but the unit fails at startup: its postrotate script calls a binary removed in the last OS upgrade.",
-      "The rot started the week of that upgrade. Disk alerts only fire at 100% — nothing watches the trend.",
-    ],
-    answerId: "disk-full",
-    nearIds: ["config-typo"],
-    postmortem:
-      "An OS upgrade silently broke logrotate, one host's access log grew for months, and the disk filled — the 2%/sometimes-succeeds pattern is the load balancer routing a fraction of traffic to the one bad host. Fix: rotate and truncate, repair the unit, and alert on disk trend and on logrotate failures, not just at 100%.",
-  },
-  {
-    service: "api-gateway",
-    sev: 2,
-    start: "07:58",
-    vignette: "PAGE — after last night's planned database failover (marked successful), 50% of API requests are erroring.",
-    clues: [
-      "The errors are connection timeouts — to the old primary's IP address.",
-      "The new primary is healthy. App pods that happened to restart after the failover work perfectly.",
-      "The failover flipped a DNS record. Old-generation pods are still resolving the retired IP.",
-      "The record's TTL is 3600s — yet the errors have persisted well past an hour.",
-      "The app runs on the JVM, which by default caches successful DNS lookups forever (networkaddress.cache.ttl = -1).",
-    ],
-    answerId: "stale-dns",
-    nearIds: ["dns-outage", "network-partition"],
-    postmortem:
-      "The failover was DNS-based, but the JVM's default resolver cache never expires entries, so long-lived pods kept dialing the dead primary regardless of TTL. Restarted pods resolved fresh — hence the clean 50/50 split. Fix: set a sane JVM DNS TTL, prefer connection-string failover or a proxy layer, and make pod recycling part of the failover runbook.",
   },
   {
     service: "auth",
@@ -186,7 +84,6 @@ const CASES = [
     clues: [
       "Every failure was verified on host pool C. Pools A and B have zero.",
       "Rejection reason in logs: 'token used before issued' — the token's iat timestamp is in the future.",
-      "Pool C's clocks are 95 seconds behind. JWT validation tolerates 60 seconds of skew.",
       "chrony isn't running on pool C — a hardening script disabled the wrong unit across that pool.",
       "Drift accumulates ~2s/day. The 401 rate has been creeping upward for six weeks and nobody connected the dots.",
     ],
@@ -194,23 +91,6 @@ const CASES = [
     nearIds: ["expired-api-key"],
     postmortem:
       "With NTP dead on one pool, its clocks drifted until freshly-issued tokens appeared to come from the future and failed validation — sporadically, because only requests landing on pool C failed. Fix: restore time sync, alert on clock offset directly, and treat 'works on retry' as a load-balancer-shaped clue.",
-  },
-  {
-    service: "orders-api",
-    sev: 3,
-    start: "10:52",
-    vignette: "PAGE — the orders list endpoint's p99 jumped from 180ms to 4.2s after this morning's deploy. DB read QPS is up 40×.",
-    clues: [
-      "Latency scales with page size: 10 rows is snappy, 100 rows is ~10× slower.",
-      "The slow-query log shows nothing slow. Instead: a flood of identical fast queries — SELECT * FROM customers WHERE id = ?.",
-      "Tracing one request: 1 query for the orders, then 1 additional query per order to fetch its customer.",
-      "This morning's diff refactored the ORM call and dropped the eager-load — includes(:customer) is gone.",
-      "Queries per request went from 3 to N+2, where N is the number of rows on the page.",
-    ],
-    answerId: "n-plus-one",
-    nearIds: ["bad-deploy", "bad-migration"],
-    postmortem:
-      "Removing the eager-load turned one join into a query per row — the textbook N+1. No single query is slow, so the slow log stays quiet while total round-trips explode; latency scaling with page size is the tell. Fix: restore the eager-load, and add a per-request query-count budget to CI.",
   },
 ];
 
@@ -235,6 +115,8 @@ function matchAnswers(q) {
   return scored.slice(0, 7).map((x) => x.a);
 }
 
+const HOURS = 7; // time budget per incident; one action = one hour
+
 const TAG = {
   page: { label: "PAGE", cls: "tag-page" },
   clue: { label: "OBSERVED", cls: "tag-clue" },
@@ -250,7 +132,7 @@ const TAG = {
 export default function Incidle() {
   const [caseIdx, setCaseIdx] = useState(0);
   const [feed, setFeed] = useState(() => initialFeed(0));
-  const [revealed, setRevealed] = useState(0);
+  const [actions, setActions] = useState([]); // "obs" | "wrong" | "solve" — one per hour burned
   const [status, setStatus] = useState("active"); // active | solved | failed
   const [query, setQuery] = useState("");
   const [guessedIds, setGuessedIds] = useState([]);
@@ -260,6 +142,8 @@ export default function Incidle() {
 
   const c = CASES[caseIdx];
   const maxClues = c.clues.length;
+  const revealed = actions.filter((a) => a === "obs").length;
+  const hoursUsed = actions.length;
   const suggestions = useMemo(() => matchAnswers(query), [query]);
 
   function initialFeed(idx) {
@@ -272,33 +156,40 @@ export default function Incidle() {
   }, [feed, status]);
 
   function eventTime(n) {
-    return addMinutes(c.start, 4 * n + 3);
+    return addMinutes(c.start, 60 * n);
   }
 
-  function revealNext(baseFeed) {
-    const next = [...baseFeed];
-    if (revealed < maxClues) {
-      next.push({ type: "clue", time: eventTime(revealed + 1), text: c.clues[revealed] });
-      setRevealed(revealed + 1);
-      return { feed: next, exhausted: false };
+  // Commit an hour-costing action; escalate if it was the budget's last hour.
+  function settle(newFeed, newActions) {
+    if (newActions.length >= HOURS) {
+      setFeed([
+        ...newFeed,
+        { type: "escalate", time: addMinutes(eventTime(HOURS), 5), text: `Incident escalated at T+${HOURS}. Postmortem identifies: ${answerById[c.answerId].name}.` },
+      ]);
+      setStatus("failed");
+      return;
     }
-    return { feed: next, exhausted: true };
+    setFeed(newFeed);
   }
 
   function handleInvestigate() {
     if (status !== "active" || revealed >= maxClues) return;
-    const { feed: f } = revealNext(feed);
-    setFeed(f);
+    const newActions = [...actions, "obs"];
+    setActions(newActions);
+    settle([...feed, { type: "clue", time: eventTime(newActions.length), text: c.clues[revealed] }], newActions);
   }
 
   function handleGuess(ans) {
     if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
     setQuery("");
-    const t = eventTime(revealed + 1);
-    if (ans.id === c.answerId) {
+    const hit = ans.id === c.answerId;
+    const newActions = [...actions, hit ? "solve" : "wrong"];
+    const t = eventTime(newActions.length);
+    setActions(newActions);
+    if (hit) {
       setFeed([
         ...feed,
-        { type: "resolve", time: t, text: `Root cause confirmed: ${ans.name}.` },
+        { type: "resolve", time: t, text: `Root cause confirmed: ${ans.name}. Resolved at T+${newActions.length}.` },
       ]);
       setStatus("solved");
       return;
@@ -307,20 +198,8 @@ export default function Incidle() {
     const entry = near
       ? { type: "near", time: t, text: `${ans.name} — directionally right, but name the mechanism. What exactly broke?` }
       : { type: "reject", time: t, text: `${ans.name}` };
-    const newGuessed = [...guessedIds, ans.id];
-    setGuessedIds(newGuessed);
-
-    if (revealed >= maxClues) {
-      setFeed([
-        ...feed,
-        entry,
-        { type: "escalate", time: addMinutes(t, 2), text: `Incident escalated. Postmortem identifies: ${answerById[c.answerId].name}.` },
-      ]);
-      setStatus("failed");
-      return;
-    }
-    const { feed: f } = revealNext([...feed, entry]);
-    setFeed(f);
+    setGuessedIds([...guessedIds, ans.id]);
+    settle([...feed, entry], newActions);
   }
 
   function onKeyDown(e) {
@@ -331,7 +210,7 @@ export default function Incidle() {
     const idx = (caseIdx + 1) % CASES.length;
     setCaseIdx(idx);
     setFeed(initialFeed(idx));
-    setRevealed(0);
+    setActions([]);
     setStatus("active");
     setQuery("");
     setGuessedIds([]);
@@ -340,17 +219,10 @@ export default function Incidle() {
   }
 
   function shareText() {
-    const total = maxClues + 1;
-    const squares = Array.from({ length: total }, (_, i) => {
-      if (status === "solved") {
-        if (i < revealed) return "🟥";
-        if (i === revealed) return "🟩";
-        return "⬜";
-      }
-      return "🟥";
-    }).join("");
-    const score = status === "solved" ? `${revealed + 1}/${total}` : `X/${total}`;
-    return `💻 Incidle ${(caseIdx + 1).toLocaleString("en-US")} > ${score}\n${squares}\n\nhttps://incidle.com`;
+    const sq = { obs: "🟦", wrong: "🟥", solve: "🟩" };
+    const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
+    const verdict = status === "solved" ? `Resolved at T+${hoursUsed}` : "Escalated!";
+    return `💻 Incidle ${caseIdx + 1}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
   }
 
   async function copyShare() {
@@ -364,7 +236,7 @@ export default function Incidle() {
   }
 
   const errRate =
-    status === "solved" ? 0.2 : status === "failed" ? 34.8 : 2.4 + revealed * 1.7 + guessedIds.length * 0.9;
+    status === "solved" ? 0.2 : status === "failed" ? 34.8 : 2.4 + hoursUsed * 1.9;
   const done = status !== "active";
 
   return (
@@ -387,16 +259,16 @@ export default function Incidle() {
         </div>
       </header>
 
-      <div className="budget" aria-label="clue budget">
-        {Array.from({ length: maxClues }, (_, i) => (
-          <span key={i} className={`pip ${i < revealed ? "pip-burned" : ""} ${done && status === "solved" ? "pip-done" : ""}`} />
+      <div className="budget" aria-label="hour budget">
+        {Array.from({ length: HOURS }, (_, i) => (
+          <span key={i} className={`pip ${actions[i] ? `pip-${actions[i]}` : ""}`} />
         ))}
         <span className="budget-label">
           {status === "active"
-            ? `${maxClues - revealed} clue${maxClues - revealed === 1 ? "" : "s"} remaining`
+            ? `${HOURS - hoursUsed} hour${HOURS - hoursUsed === 1 ? "" : "s"} until escalation`
             : status === "solved"
-            ? `mitigated after ${revealed} clue${revealed === 1 ? "" : "s"}`
-            : "clue budget exhausted"}
+            ? `resolved at T+${hoursUsed}`
+            : `escalated at T+${HOURS}`}
         </span>
       </div>
 
@@ -459,7 +331,7 @@ export default function Incidle() {
             )}
           </div>
           <button className="btn btn-secondary" onClick={handleInvestigate} disabled={revealed >= maxClues}>
-            investigate <span className="btn-sub">(reveal a clue)</span>
+            Investigate <span className="btn-sub">(reveal a clue)</span>
           </button>
         </footer>
       )}
@@ -512,8 +384,9 @@ const CSS = `
   border-bottom: 1px solid var(--line);
 }
 .pip { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
-.pip-burned { background: var(--amber); }
-.pip-done.pip-burned { background: var(--amber); }
+.pip-obs { background: var(--cyan); }
+.pip-wrong { background: var(--red); }
+.pip-solve { background: var(--green); }
 .budget-label { margin-left: 8px; color: var(--muted); font-size: 12.5px; }
 
 .feed { flex: 1; overflow-y: auto; padding: 18px 16px 24px; max-width: 860px; width: 100%; margin: 0 auto; }
