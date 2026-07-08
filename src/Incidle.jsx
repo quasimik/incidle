@@ -136,6 +136,8 @@ export default function Incidle() {
   const [status, setStatus] = useState("active"); // active | solved | failed
   const [query, setQuery] = useState("");
   const [guessedIds, setGuessedIds] = useState([]);
+  const [selIdx, setSelIdx] = useState(0); // highlighted suggestion
+  const [staged, setStaged] = useState(null); // confirmed pick, awaiting submit
   const [copied, setCopied] = useState(false);
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -145,6 +147,7 @@ export default function Incidle() {
   const revealed = actions.filter((a) => a === "obs").length;
   const hoursUsed = actions.length;
   const suggestions = useMemo(() => matchAnswers(query), [query]);
+  const sel = Math.min(selIdx, Math.max(suggestions.length - 1, 0));
 
   function initialFeed(idx) {
     const cs = CASES[idx];
@@ -182,6 +185,8 @@ export default function Incidle() {
   function handleGuess(ans) {
     if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
     setQuery("");
+    setStaged(null);
+    setSelIdx(0);
     const hit = ans.id === c.answerId;
     const newActions = [...actions, hit ? "solve" : "wrong"];
     const t = eventTime(newActions.length);
@@ -202,8 +207,33 @@ export default function Incidle() {
     settle([...feed, entry], newActions);
   }
 
+  // Two-step guess: confirm a suggestion (enter / number / click / arrows+enter)
+  // to stage it, then Guess button or a second enter submits it.
+  function confirmPick(ans) {
+    if (guessedIds.includes(ans.id)) return;
+    setStaged(ans);
+    setQuery(ans.name);
+    setSelIdx(0);
+  }
+
   function onKeyDown(e) {
-    if (e.key === "Enter" && suggestions.length > 0) handleGuess(suggestions[0]);
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (staged) handleGuess(staged);
+      else if (suggestions.length > 0) confirmPick(suggestions[sel]);
+      return;
+    }
+    if (staged || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelIdx(Math.min(sel + 1, suggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelIdx(Math.max(sel - 1, 0));
+    } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= suggestions.length) {
+      e.preventDefault();
+      confirmPick(suggestions[Number(e.key) - 1]);
+    }
   }
 
   function nextCase() {
@@ -214,6 +244,8 @@ export default function Incidle() {
     setStatus("active");
     setQuery("");
     setGuessedIds([]);
+    setSelIdx(0);
+    setStaged(null);
     setCopied(false);
     setTimeout(() => inputRef.current?.focus(), 50);
   }
@@ -301,38 +333,53 @@ export default function Incidle() {
 
       {!done && (
         <footer className="dock">
-          <div className="combo">
-            <input
-              ref={inputRef}
-              className="combo-input"
-              value={query}
-              placeholder="Guess root cause… (type to search)"
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              aria-label="guess root cause"
-              autoFocus
-            />
-            {suggestions.length > 0 && (
-              <ul className="combo-list" role="listbox">
-                {suggestions.map((a, i) => (
-                  <li key={a.id}>
-                    <button
-                      className={`combo-opt ${i === 0 ? "combo-opt-top" : ""} ${guessedIds.includes(a.id) ? "combo-opt-used" : ""}`}
-                      onClick={() => handleGuess(a)}
-                      disabled={guessedIds.includes(a.id)}
-                    >
-                      {a.name}
-                      {guessedIds.includes(a.id) && <span className="used-note"> — rejected</span>}
-                      {i === 0 && !guessedIds.includes(a.id) && <span className="enter-hint">↵</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <button className="btn btn-secondary" onClick={handleInvestigate} disabled={revealed >= maxClues}>
+          <button className="btn btn-secondary btn-wide" onClick={handleInvestigate} disabled={revealed >= maxClues}>
             Investigate <span className="btn-sub">(reveal a clue)</span>
           </button>
+          <div className="dock-row">
+            <div className="combo">
+              <input
+                ref={inputRef}
+                className={`combo-input ${staged ? "combo-input-staged" : ""}`}
+                value={query}
+                placeholder="Guess root cause… (type to search)"
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setStaged(null);
+                  setSelIdx(0);
+                }}
+                onKeyDown={onKeyDown}
+                aria-label="guess root cause"
+                autoFocus
+              />
+              {!staged && suggestions.length > 0 && (
+                <ul className="combo-list" role="listbox">
+                  {suggestions.map((a, i) => {
+                    const used = guessedIds.includes(a.id);
+                    return (
+                      <li key={a.id}>
+                        <button
+                          className={`combo-opt ${i === sel ? "combo-opt-sel" : ""} ${used ? "combo-opt-used" : ""}`}
+                          onClick={() => confirmPick(a)}
+                          disabled={used}
+                        >
+                          <span className="opt-main">
+                            <span className="opt-num">{i + 1}</span>
+                            {a.name}
+                            {used && <span className="used-note"> — rejected</span>}
+                          </span>
+                          {i === sel && !used && <span className="enter-hint">↵</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <button className="btn btn-primary" onClick={() => staged && handleGuess(staged)} disabled={!staged}>
+              Guess{staged ? " ↵" : ""}
+            </button>
+          </div>
         </footer>
       )}
     </div>
@@ -437,10 +484,13 @@ const CSS = `
 }
 
 .dock {
-  display: flex; gap: 10px; padding: 12px 16px 28px; border-top: 1px solid var(--line);
-  background: var(--panel); max-width: 860px; width: 100%; margin: 0 auto; align-items: flex-start;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 28px;
+  border-top: 1px solid var(--line);
+  background: var(--panel); max-width: 860px; width: 100%; margin: 0 auto;
   position: relative;
 }
+.dock-row { display: flex; gap: 10px; align-items: flex-start; }
+.btn-wide { width: 100%; }
 .combo { position: relative; flex: 1; }
 .combo-input {
   width: 100%; padding: 11px 13px; border-radius: 7px;
@@ -448,6 +498,7 @@ const CSS = `
   font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px;
 }
 .combo-input::placeholder { color: var(--muted); }
+.combo-input-staged { border-color: rgba(87,217,147,.6); }
 .combo-list {
   position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
   list-style: none; margin: 0; padding: 4px;
@@ -460,8 +511,10 @@ const CSS = `
   background: transparent; color: var(--text); font-size: 14px;
 }
 .combo-opt:hover:not(:disabled) { background: rgba(107,213,232,.1); }
-.combo-opt-top:not(:disabled) { background: rgba(107,213,232,.07); }
+.combo-opt-sel:not(:disabled) { background: rgba(107,213,232,.07); }
 .combo-opt-used { color: var(--muted); cursor: not-allowed; }
+.opt-main { display: flex; align-items: baseline; gap: 9px; }
+.opt-num { color: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; }
 .used-note { font-size: 12px; }
 .enter-hint { color: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; }
 
@@ -479,7 +532,5 @@ const CSS = `
 @media (max-width: 560px) {
   .entry { grid-template-columns: 42px 1fr; }
   .entry .text { grid-column: 1 / -1; }
-  .dock { flex-direction: column; }
-  .dock .btn { width: 100%; }
 }
 `;
