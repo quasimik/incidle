@@ -141,6 +141,7 @@ export default function Incidle() {
   const [copied, setCopied] = useState(false);
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
+  const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
 
   const c = CASES[caseIdx];
   const maxClues = c.clues.length;
@@ -196,6 +197,7 @@ export default function Incidle() {
 
   function handleGuess(ans) {
     if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
+    lastGuessAt.current = Date.now();
     setQuery("");
     setStaged(null);
     setSelIdx(0);
@@ -234,6 +236,7 @@ export default function Incidle() {
       e.preventDefault();
       if (staged) handleGuess(staged);
       else if (suggestions.length > 0) confirmPick(suggestions[sel]);
+      else if (query.trim() === "" && !e.repeat && Date.now() - lastGuessAt.current > 400) handleInvestigate();
       return;
     }
     if (staged || suggestions.length === 0) return;
