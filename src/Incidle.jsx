@@ -37,17 +37,22 @@ const ANSWERS = [
 const answerById = Object.fromEntries(ANSWERS.map((a) => [a.id, a]));
 
 // ---------------------------------------------------------------------------
-// CASES — the paging vignette is free. Every action after that — revealing an
-// observation or testing a hypothesis (right or wrong) — burns one hour of the
-// HOURS budget. Unresolved at T+HOURS, the incident escalates.
+// CASES — the paging vignette and the stack primer are free. Every action
+// after that — revealing an observation or testing a hypothesis (right or
+// wrong) — burns one hour of the HOURS budget. Unresolved at T+HOURS, the
+// incident escalates.
 // Clue order mirrors real triage: symptom → metrics → changes → smoking gun.
 // nearIds get a "directionally right" response but still cost the hour.
+// stack: what the responder would already know — relevant or apparently
+// relevant only, never exhaustive. It shapes the hypothesis space for free.
 // ---------------------------------------------------------------------------
 const CASES = [
   {
     service: "checkout-api",
     sev: 2,
     vignette: "PAGE — checkout error rate at 4% and climbing. Users seeing 503s at payment step.",
+    stack:
+      "checkout-api fronts the purchase flow and calls payments-svc for card auth against a third-party processor. Several backend services share one Postgres primary (max_connections 500). Sessions live in Redis. Teams deploy independently, many times a day.",
     clues: [
       "All failures are 503s originating from payments-svc. Every other endpoint is healthy.",
       "payments-svc looks fine: CPU and memory normal, zero restarts, latency on successful requests unchanged.",
@@ -63,6 +68,8 @@ const CASES = [
     service: "product-page",
     sev: 3,
     vignette: "PAGE — database CPU alarms firing in bursts. Product pages crawl for ~30s, recover, then it happens again.",
+    stack:
+      "product-page renders server-side off a Postgres read pool. Expensive aggregations are cached look-aside in Redis with TTLs. A CDN caches full pages for anonymous traffic, and assorted cron jobs run housekeeping on fixed schedules.",
     clues: [
       "The spikes land exactly on a 15-minute grid: :00, :15, :30, :45.",
       "During each spike the DB runs the same expensive query hundreds of times concurrently — the top-sellers aggregation.",
@@ -78,6 +85,8 @@ const CASES = [
     service: "auth",
     sev: 3,
     vignette: "PAGE — 0.7% of API calls failing with 401 invalid token. The same user's token works fine on retry.",
+    stack:
+      "auth issues short-lived signed tokens (JWT, 15-minute expiry) that services verify locally against weekly-rotated keys. Verification runs on three pools of long-lived VMs behind a round-robin balancer. A security-hardening pass tightened baseline host configs recently.",
     clues: [
       "Every failure was verified on host pool C. Pools A and B have zero.",
       "Rejection reason in logs: 'token used before issued' — the token's iat timestamp is in the future.",
@@ -111,6 +120,7 @@ const HOURS = 7; // time budget per incident; one action = one hour
 
 const TAG = {
   page: { label: "PAGE", cls: "tag-page" },
+  stack: { label: "SYSTEM", cls: "tag-stack" },
   clue: { label: "OBSERVED", cls: "tag-clue" },
   reject: { label: "REJECTED", cls: "tag-reject" },
   near: { label: "CLOSE", cls: "tag-near" },
@@ -145,7 +155,10 @@ export default function Incidle() {
 
   function initialFeed(idx) {
     const cs = CASES[idx];
-    return [{ type: "page", time: "T+0", text: cs.vignette }];
+    return [
+      { type: "stack", time: "", text: cs.stack },
+      { type: "page", time: "T+0", text: cs.vignette },
+    ];
   }
 
   useEffect(() => {
@@ -161,7 +174,7 @@ export default function Incidle() {
     if (newActions.length >= HOURS) {
       setFeed([
         ...newFeed,
-        { type: "escalate", time: eventTime(HOURS), text: `Postmortem identifies: ${answerById[c.answerId].name}.` },
+        { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[c.answerId].name}.` },
       ]);
       setStatus("failed");
       return;
@@ -463,6 +476,7 @@ const CSS = `
   letter-spacing: .08em; padding: 2px 6px; border-radius: 4px; text-align: center; white-space: nowrap;
 }
 .tag-page { background: rgba(255,107,107,.16); color: var(--red); }
+.tag-stack { background: rgba(124,138,160,.14); color: var(--muted); }
 .tag-clue { background: rgba(107,213,232,.12); color: var(--cyan); }
 .tag-reject { background: rgba(124,138,160,.14); color: var(--muted); }
 .tag-near { background: rgba(255,196,107,.15); color: var(--amber); }
@@ -471,6 +485,8 @@ const CSS = `
 .text { line-height: 1.5; }
 .entry-page { background: rgba(255,107,107,.06); border: 1px solid rgba(255,107,107,.18); }
 .entry-page .text { font-weight: 500; }
+.entry-stack { border: 1px dashed var(--line); }
+.entry-stack .text { color: var(--muted); font-size: 13.5px; }
 .entry-clue { background: var(--panel); border: 1px solid var(--line); }
 .entry-clue .text { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13.5px; }
 .entry-reject .text { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(255,107,107,.5); }
