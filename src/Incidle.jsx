@@ -345,6 +345,7 @@ export default function Incidle() {
 
       {!done && (
         <footer className="dock">
+          <div className="dock-main">
           <button className="btn btn-secondary btn-wide" onClick={handleInvestigate} disabled={revealed >= maxClues}>
             <kbd className="key">0</kbd> Investigate <span className="btn-sub">(reveal a clue)</span>
           </button>
@@ -391,6 +392,17 @@ export default function Incidle() {
             <button className="btn btn-primary" onClick={() => staged && handleGuess(staged)} disabled={!staged}>
               Guess{staged ? " ↵" : ""}
             </button>
+          </div>
+          </div>
+          <div className="dock-cost" key={hoursUsed} title="either move burns one hour">
+            <svg className="cost-brace" viewBox="0 0 16 100" preserveAspectRatio="none" aria-hidden="true">
+              <path
+                d="M2,1 Q8,1 8,9 L8,42 Q8,50 14,50 Q8,50 8,58 L8,91 Q8,99 2,99"
+                fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+            <span className="cost-label">1 HOUR</span>
           </div>
         </footer>
       )}
@@ -455,7 +467,7 @@ const CSS = `
   animation: arrive .28s ease-out;
 }
 @keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .entry { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .entry, .cost-brace, .cost-label { animation: none; } }
 .time { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: var(--muted); }
 .tag {
   font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10.5px; font-weight: 600;
@@ -496,12 +508,28 @@ const CSS = `
 }
 
 .dock {
-  display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 28px;
+  display: flex; gap: 11px; align-items: stretch; padding: 12px 16px 28px;
   border-top: 1px solid var(--line);
   background: var(--panel); max-width: 860px; width: 100%; margin: 0 auto;
   position: relative;
 }
+.dock-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .dock-row { display: flex; gap: 10px; align-items: flex-start; }
+.dock-cost { display: flex; align-items: center; gap: 7px; cursor: default; }
+.cost-brace {
+  align-self: stretch; width: 15px; height: auto; color: var(--amber);
+  opacity: .75; animation: cost-pulse-bracket .55s ease-out;
+}
+.cost-label {
+  writing-mode: vertical-rl; font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 600; letter-spacing: .16em; color: var(--amber);
+  animation: cost-pulse-label .55s ease-out;
+}
+@keyframes cost-pulse-bracket {
+  from { opacity: 1; filter: drop-shadow(0 0 5px rgba(255,196,107,.9)); }
+  to { opacity: .75; filter: drop-shadow(0 0 0 rgba(255,196,107,0)); }
+}
+@keyframes cost-pulse-label { from { color: #fff; text-shadow: 0 0 12px rgba(255,196,107,.9); } }
 .btn-wide {
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
 }
