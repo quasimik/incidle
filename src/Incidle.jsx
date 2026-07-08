@@ -47,7 +47,6 @@ const CASES = [
   {
     service: "checkout-api",
     sev: 2,
-    start: "03:12",
     vignette: "PAGE — checkout error rate at 4% and climbing. Users seeing 503s at payment step.",
     clues: [
       "All failures are 503s originating from payments-svc. Every other endpoint is healthy.",
@@ -63,7 +62,6 @@ const CASES = [
   {
     service: "product-page",
     sev: 3,
-    start: "14:02",
     vignette: "PAGE — database CPU alarms firing in bursts. Product pages crawl for ~30s, recover, then it happens again.",
     clues: [
       "The spikes land exactly on a 15-minute grid: :00, :15, :30, :45.",
@@ -79,7 +77,6 @@ const CASES = [
   {
     service: "auth",
     sev: 3,
-    start: "13:41",
     vignette: "PAGE — 0.7% of API calls failing with 401 invalid token. The same user's token works fine on retry.",
     clues: [
       "Every failure was verified on host pool C. Pools A and B have zero.",
@@ -97,11 +94,6 @@ const CASES = [
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-function addMinutes(hhmm, mins) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const t = (h * 60 + m + mins + 1440) % 1440;
-  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
-}
 function matchAnswers(q) {
   const s = q.trim().toLowerCase();
   if (!s) return [];
@@ -153,7 +145,7 @@ export default function Incidle() {
 
   function initialFeed(idx) {
     const cs = CASES[idx];
-    return [{ type: "page", time: cs.start, text: cs.vignette }];
+    return [{ type: "page", time: "T+0", text: cs.vignette }];
   }
 
   useEffect(() => {
@@ -161,7 +153,7 @@ export default function Incidle() {
   }, [feed, status]);
 
   function eventTime(n) {
-    return addMinutes(c.start, 60 * n);
+    return `T+${n}`;
   }
 
   // Commit an hour-costing action; escalate if it was the budget's last hour.
@@ -169,7 +161,7 @@ export default function Incidle() {
     if (newActions.length >= HOURS) {
       setFeed([
         ...newFeed,
-        { type: "escalate", time: addMinutes(eventTime(HOURS), 5), text: `Incident escalated at T+${HOURS}. Postmortem identifies: ${answerById[c.answerId].name}.` },
+        { type: "escalate", time: eventTime(HOURS), text: `Postmortem identifies: ${answerById[c.answerId].name}.` },
       ]);
       setStatus("failed");
       return;
@@ -198,7 +190,7 @@ export default function Incidle() {
     if (hit) {
       setFeed([
         ...feed,
-        { type: "resolve", time: t, text: `Root cause confirmed: ${ans.name}. Resolved at T+${newActions.length}.` },
+        { type: "resolve", time: t, text: `Root cause confirmed: ${ans.name}.` },
       ]);
       setStatus("solved");
       return;
@@ -266,8 +258,8 @@ export default function Incidle() {
   function shareText() {
     const sq = { obs: "🟦", wrong: "🟥", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
-    const verdict = status === "solved" ? `Resolved at T+${hoursUsed}` : "Escalated!";
-    return `💻 Incidle ${caseIdx + 1}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
+    const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
+    return `💻 incidle ${caseIdx + 1}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
   }
 
   async function copyShare() {
@@ -331,7 +323,7 @@ export default function Incidle() {
 
         {done && (
           <div className="post">
-            <div className="post-head">{status === "solved" ? "POSTMORTEM — nice triage" : "POSTMORTEM"}</div>
+            <div className="post-head">POSTMORTEM — {answerById[c.answerId].name}</div>
             <p className="post-body">{c.postmortem}</p>
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
@@ -355,7 +347,7 @@ export default function Incidle() {
                 ref={inputRef}
                 className={`combo-input ${staged ? "combo-input-staged" : ""}`}
                 value={query}
-                placeholder="Guess root cause… (type to search)"
+                placeholder="guess root cause… (type to search)"
                 onChange={(e) => {
                   setQuery(e.target.value);
                   setStaged(null);
@@ -396,7 +388,7 @@ export default function Incidle() {
               onClick={() => (investigateMode ? handleInvestigate() : staged && handleGuess(staged))}
               disabled={investigateMode ? revealed >= maxClues : !staged}
             >
-              {investigateMode ? "Investigate" : "Root-cause"}
+              {investigateMode ? "investigate" : "root-cause"}
               {(enterInvestigates || staged) && <kbd className="key">↵</kbd>}
               <span className="cost-tag" key={hoursUsed} title="every move burns one hour">1 HOUR</span>
             </button>
@@ -459,7 +451,7 @@ const CSS = `
 
 .feed { flex: 1; overflow-y: auto; padding: 18px 16px 24px; max-width: 860px; width: 100%; margin: 0 auto; }
 .entry {
-  display: grid; grid-template-columns: 46px 88px 1fr; gap: 10px; align-items: baseline;
+  display: grid; grid-template-columns: 26px 88px 1fr; gap: 10px; align-items: baseline;
   padding: 9px 10px; border-radius: 6px; margin-bottom: 6px;
   animation: arrive .28s ease-out;
 }
@@ -494,7 +486,7 @@ const CSS = `
 }
 .post-head {
   font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600;
-  letter-spacing: .14em; color: var(--muted); margin-bottom: 8px;
+  letter-spacing: .14em; color: var(--muted); margin-bottom: 8px; text-transform: uppercase;
 }
 .post-body { margin: 0 0 14px; line-height: 1.6; }
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
