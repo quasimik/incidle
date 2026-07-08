@@ -52,29 +52,29 @@ const CASES = [
     sev: 2,
     vignette: "PAGE — checkout error rate at 4% and climbing. Users seeing 503s at payment step.",
     stack:
-      "checkout-api fronts the purchase flow and calls payments-svc for card auth against a third-party processor. Several backend services share one Postgres primary (max_connections 500). Sessions live in Redis. Teams deploy independently, many times a day.",
+      "`checkout-api` fronts the purchase flow and calls `payments-svc` for card auth against a third-party processor. Several backend services share one Postgres primary (`max_connections` 500). Sessions live in Redis. Teams deploy independently, many times a day.",
     clues: [
-      "All failures are 503s originating from payments-svc. Every other endpoint is healthy.",
-      "payments-svc looks fine: CPU and memory normal, zero restarts, latency on successful requests unchanged.",
-      "Deploy log: promo-svc shipped 25 minutes ago. Different team. No shared code with payments.",
-      "Postgres (payments db): active connections pinned at 500/500. Most are idle-in-transaction — owned by promo-svc.",
+      "All failures are 503s originating from `payments-svc`. Every other endpoint is healthy.",
+      "`payments-svc` looks fine: CPU and memory normal, zero restarts, latency on successful requests unchanged.",
+      "Deploy log: `promo-svc` shipped 25 minutes ago. Different team. No shared code with payments.",
+      "Postgres (payments db): active connections pinned at 500/500. Most are `idle in transaction` — owned by `promo-svc`.",
     ],
     answerId: "connection-pool-exhaustion",
     nearIds: ["bad-deploy", "thread-pool"],
     postmortem:
-      "promo-svc and payments-svc share a database. The new coupon path leaked connections (opened transactions, never closed), pinning the pool at max and starving payments-svc — which failed while looking perfectly healthy itself. Fix: roll back, add an idle-in-transaction timeout, and give each service its own pool with a hard cap.",
+      "`promo-svc` and `payments-svc` share a database. The new coupon path leaked connections (opened transactions, never closed), pinning the pool at max and starving `payments-svc` — which failed while looking perfectly healthy itself. Fix: roll back, add an idle-in-transaction timeout, and give each service its own pool with a hard cap.",
   },
   {
     service: "product-page",
     sev: 3,
     vignette: "PAGE — database CPU alarms firing in bursts. Product pages crawl for ~30s, recover, then it happens again.",
     stack:
-      "product-page renders server-side off a Postgres read pool. Expensive aggregations are cached look-aside in Redis with TTLs. A CDN caches full pages for anonymous traffic, and assorted cron jobs run housekeeping on fixed schedules.",
+      "`product-page` renders server-side off a Postgres read pool. Expensive aggregations are cached look-aside in Redis with TTLs. A CDN caches full pages for anonymous traffic, and assorted cron jobs run housekeeping on fixed schedules.",
     clues: [
       "The spikes land exactly on a 15-minute grid: :00, :15, :30, :45.",
       "During each spike the DB runs the same expensive query hundreds of times concurrently — the top-sellers aggregation.",
       "Redis is healthy overall, but the hit rate for one key drops to zero at each spike, then recovers.",
-      "The top_sellers key: TTL 900 seconds, no jitter. Recomputing it takes about 8 seconds.",
+      "The `top_sellers` key: TTL 900 seconds, no jitter. Recomputing it takes about 8 seconds.",
     ],
     answerId: "cache-stampede",
     nearIds: ["cache-eviction"],
@@ -89,8 +89,8 @@ const CASES = [
       "auth issues short-lived signed tokens (JWT, 15-minute expiry) that services verify locally against weekly-rotated keys. Verification runs on three pools of long-lived VMs behind a round-robin balancer. A security-hardening pass tightened baseline host configs recently.",
     clues: [
       "Every failure was verified on host pool C. Pools A and B have zero.",
-      "Rejection reason in logs: 'token used before issued' — the token's iat timestamp is in the future.",
-      "chrony isn't running on pool C — a hardening script disabled the wrong unit across that pool.",
+      "Rejection reason in logs: 'token used before issued' — the token's `iat` timestamp is in the future.",
+      "`chrony` isn't running on pool C — a hardening script disabled the wrong unit across that pool.",
       "Drift accumulates ~2s/day. The 401 rate has been creeping upward for six weeks and nobody connected the dots.",
     ],
     answerId: "clock-skew",
@@ -114,6 +114,11 @@ function matchAnswers(q) {
   }).filter((x) => x.score > 0);
   scored.sort((x, y) => y.score - x.score || x.a.name.localeCompare(y.a.name));
   return scored.slice(0, 7).map((x) => x.a);
+}
+
+// `code` spans in feed text — odd-index segments sit inside backticks.
+function rich(text) {
+  return text.split("`").map((seg, i) => (i % 2 ? <code key={i}>{seg}</code> : seg));
 }
 
 const HOURS = 7; // time budget per incident; one action = one hour
@@ -330,14 +335,14 @@ export default function Incidle() {
           <div key={i} className={`entry entry-${e.type}`}>
             <span className="time">{e.time}</span>
             <span className={`tag ${TAG[e.type].cls}`}>{TAG[e.type].label}</span>
-            <span className="text">{e.text}</span>
+            <span className="text">{rich(e.text)}</span>
           </div>
         ))}
 
         {done && (
           <div className="post">
             <div className="post-head">POSTMORTEM — {answerById[c.answerId].name}</div>
-            <p className="post-body">{c.postmortem}</p>
+            <p className="post-body">{rich(c.postmortem)}</p>
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 {copied ? "copied ✓" : "copy result"}
@@ -483,6 +488,11 @@ const CSS = `
 .tag-resolve { background: rgba(87,217,147,.16); color: var(--green); }
 .tag-escalate { background: rgba(255,107,107,.16); color: var(--red); }
 .text { line-height: 1.5; }
+.text code, .post-body code {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .92em;
+  color: var(--cyan); background: rgba(107,213,232,.08);
+  padding: 1px 4px; border-radius: 4px;
+}
 .entry-page { background: rgba(255,107,107,.06); border: 1px solid rgba(255,107,107,.18); }
 .entry-page .text { font-weight: 500; }
 .entry-stack { border: 1px dashed var(--line); }
