@@ -238,7 +238,7 @@ function matchAnswers(q) {
 const TAG = {
   page: { label: "PAGE", cls: "tag-page" },
   clue: { label: "OBSERVED", cls: "tag-clue" },
-  reject: { label: "RULED OUT", cls: "tag-reject" },
+  reject: { label: "REJECTED", cls: "tag-reject" },
   near: { label: "CLOSE", cls: "tag-near" },
   resolve: { label: "RESOLVED", cls: "tag-resolve" },
   escalate: { label: "ESCALATED", cls: "tag-escalate" },
@@ -306,7 +306,7 @@ export default function Incidle() {
     const near = c.nearIds?.includes(ans.id);
     const entry = near
       ? { type: "near", time: t, text: `${ans.name} — directionally right, but name the mechanism. What exactly broke?` }
-      : { type: "reject", time: t, text: `Hypothesis rejected: ${ans.name}. Evidence doesn't fit.` };
+      : { type: "reject", time: t, text: `${ans.name}` };
     const newGuessed = [...guessedIds, ans.id];
     setGuessedIds(newGuessed);
 
@@ -340,16 +340,17 @@ export default function Incidle() {
   }
 
   function shareText() {
-    const squares = Array.from({ length: maxClues + 1 }, (_, i) => {
+    const total = maxClues + 1;
+    const squares = Array.from({ length: total }, (_, i) => {
       if (status === "solved") {
-        if (i < revealed) return "🟨";
+        if (i < revealed) return "🟥";
         if (i === revealed) return "🟩";
         return "⬜";
       }
-      return i <= maxClues ? "🟥" : "⬜";
+      return "🟥";
     }).join("");
-    const verdict = status === "solved" ? `solved after ${revealed} clue${revealed === 1 ? "" : "s"}` : "escalated";
-    return `Incidle #${caseIdx + 1} (${c.service}) — ${verdict}\n${squares}`;
+    const score = status === "solved" ? `${revealed + 1}/${total}` : `X/${total}`;
+    return `💻 Incidle ${(caseIdx + 1).toLocaleString("en-US")} > ${score}\n${squares}\n\nhttps://incidle.com`;
   }
 
   async function copyShare() {
@@ -372,7 +373,7 @@ export default function Incidle() {
 
       <header className="hdr">
         <div className="hdr-left">
-          <span className="brand">INCIDENTDLE</span>
+          <span className="brand">INCIDLE</span>
           <span className="case-num">
             incident {caseIdx + 1}/{CASES.length}
           </span>
@@ -433,10 +434,10 @@ export default function Incidle() {
               ref={inputRef}
               className="combo-input"
               value={query}
-              placeholder="Root cause hypothesis… (type to search)"
+              placeholder="Guess root cause… (type to search)"
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyDown}
-              aria-label="root cause hypothesis"
+              aria-label="guess root cause"
               autoFocus
             />
             {suggestions.length > 0 && (
@@ -449,7 +450,7 @@ export default function Incidle() {
                       disabled={guessedIds.includes(a.id)}
                     >
                       {a.name}
-                      {guessedIds.includes(a.id) && <span className="used-note"> — ruled out</span>}
+                      {guessedIds.includes(a.id) && <span className="used-note"> — rejected</span>}
                       {i === 0 && !guessedIds.includes(a.id) && <span className="enter-hint">↵</span>}
                     </button>
                   </li>
@@ -563,7 +564,7 @@ const CSS = `
 }
 
 .dock {
-  display: flex; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--line);
+  display: flex; gap: 10px; padding: 12px 16px 28px; border-top: 1px solid var(--line);
   background: var(--panel); max-width: 860px; width: 100%; margin: 0 auto; align-items: flex-start;
   position: relative;
 }
