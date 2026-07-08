@@ -138,6 +138,7 @@ export default function Incidle() {
   const [guessedIds, setGuessedIds] = useState([]);
   const [selIdx, setSelIdx] = useState(0); // highlighted suggestion
   const [staged, setStaged] = useState(null); // confirmed pick, awaiting submit
+  const [inputFocused, setInputFocused] = useState(false);
   const [copied, setCopied] = useState(false);
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -286,6 +287,8 @@ export default function Incidle() {
   const errRate =
     status === "solved" ? 0.2 : status === "failed" ? 34.8 : 2.4 + hoursUsed * 1.9;
   const done = status !== "active";
+  // enter would investigate right now — light up the button and show ↵
+  const enterInvestigates = inputFocused && query.trim() === "" && !staged && revealed < maxClues;
 
   return (
     <div className="idle-root">
@@ -350,8 +353,14 @@ export default function Incidle() {
       {!done && (
         <footer className="dock">
           <div className="dock-main">
-          <button className="btn btn-secondary btn-wide" onClick={handleInvestigate} disabled={revealed >= maxClues}>
-            <kbd className="key">0</kbd> Investigate <span className="btn-sub">(reveal a clue)</span>
+          <button
+            className={`btn btn-secondary btn-wide ${enterInvestigates ? "btn-armed" : ""}`}
+            onClick={handleInvestigate}
+            disabled={revealed >= maxClues}
+          >
+            <kbd className="key">0</kbd>
+            {enterInvestigates && <kbd className="key">↵</kbd>}
+            Investigate <span className="btn-sub">(reveal a clue)</span>
           </button>
           <div className="dock-row">
             <div className="combo">
@@ -366,6 +375,8 @@ export default function Incidle() {
                   setSelIdx(0);
                 }}
                 onKeyDown={onKeyDown}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 aria-label="guess root cause"
                 autoFocus
               />
@@ -578,6 +589,11 @@ const CSS = `
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-sub { color: var(--muted); font-weight: 400; font-size: 12.5px; }
 .btn-secondary:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+.btn-armed {
+  border-color: var(--amber); color: var(--amber);
+  box-shadow: 0 0 10px rgba(255,196,107,.18);
+}
+.btn-armed .key { color: var(--amber); border-color: rgba(255,196,107,.45); }
 .btn-primary { background: rgba(87,217,147,.14); border-color: rgba(87,217,147,.4); color: var(--green); }
 .btn-primary:hover { background: rgba(87,217,147,.22); }
 .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
