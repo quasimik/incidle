@@ -184,17 +184,6 @@ export default function Incidle() {
     settle([...feed, { type: "clue", time: eventTime(newActions.length), text: c.clues[revealed] }], newActions);
   }
 
-  // Hotkey: 0 investigates (1-9 confirm suggestions). Window-level so it works
-  // regardless of focus; re-registered each render to see fresh state.
-  useEffect(() => {
-    function onHotkey(e) {
-      if (e.key !== "0" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-      e.preventDefault();
-      handleInvestigate();
-    }
-    window.addEventListener("keydown", onHotkey);
-    return () => window.removeEventListener("keydown", onHotkey);
-  });
 
   function handleGuess(ans) {
     if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
@@ -238,6 +227,13 @@ export default function Incidle() {
       if (staged) handleGuess(staged);
       else if (suggestions.length > 0) confirmPick(suggestions[sel]);
       else if (query.trim() === "" && !e.repeat && Date.now() - lastGuessAt.current > 400) handleInvestigate();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setQuery("");
+      setStaged(null);
+      setSelIdx(0);
       return;
     }
     if (staged || suggestions.length === 0) return;
@@ -287,8 +283,9 @@ export default function Incidle() {
   const errRate =
     status === "solved" ? 0.2 : status === "failed" ? 34.8 : 2.4 + hoursUsed * 1.9;
   const done = status !== "active";
-  // enter would investigate right now — light up the button and show ↵
-  const enterInvestigates = inputFocused && query.trim() === "" && !staged && revealed < maxClues;
+  // one action button: investigate on empty field, guess otherwise
+  const investigateMode = !staged && query.trim() === "";
+  const enterInvestigates = inputFocused && investigateMode && revealed < maxClues;
 
   return (
     <div className="idle-root">
@@ -353,15 +350,6 @@ export default function Incidle() {
       {!done && (
         <footer className="dock">
           <div className="dock-main">
-          <button
-            className={`btn btn-secondary btn-wide ${enterInvestigates ? "btn-armed" : ""}`}
-            onClick={handleInvestigate}
-            disabled={revealed >= maxClues}
-          >
-            <kbd className="key">0</kbd>
-            {enterInvestigates && <kbd className="key">↵</kbd>}
-            Investigate <span className="btn-sub">(reveal a clue)</span>
-          </button>
           <div className="dock-row">
             <div className="combo">
               <input
@@ -404,12 +392,17 @@ export default function Incidle() {
                 </ul>
               )}
             </div>
-            <button className="btn btn-primary" onClick={() => staged && handleGuess(staged)} disabled={!staged}>
-              Guess{staged ? " ↵" : ""}
+            <button
+              className={`btn action-btn ${investigateMode ? "btn-secondary" : "btn-primary"} ${enterInvestigates ? "btn-armed" : ""}`}
+              onClick={() => (investigateMode ? handleInvestigate() : staged && handleGuess(staged))}
+              disabled={investigateMode ? revealed >= maxClues : !staged}
+            >
+              {investigateMode ? "Investigate" : "Guess"}
+              {(enterInvestigates || staged) && <kbd className="key">↵</kbd>}
             </button>
           </div>
           </div>
-          <div className="dock-cost" key={hoursUsed} title="either move burns one hour">
+          <div className="dock-cost" key={hoursUsed} title="every move burns one hour">
             <svg className="cost-brace" viewBox="0 0 16 100" preserveAspectRatio="none" aria-hidden="true">
               <path
                 d="M2,1 Q8,1 8,9 L8,42 Q8,50 14,50 Q8,50 8,58 L8,91 Q8,99 2,99"
@@ -545,8 +538,8 @@ const CSS = `
   to { opacity: .75; filter: drop-shadow(0 0 0 rgba(255,196,107,0)); }
 }
 @keyframes cost-pulse-label { from { color: #fff; text-shadow: 0 0 12px rgba(255,196,107,.9); } }
-.btn-wide {
-  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+.action-btn {
+  min-width: 152px; display: flex; align-items: center; justify-content: center; gap: 8px;
 }
 .combo { position: relative; flex: 1; }
 .combo-input {
@@ -594,6 +587,7 @@ const CSS = `
   box-shadow: 0 0 10px rgba(255,196,107,.18);
 }
 .btn-armed .key { color: var(--amber); border-color: rgba(255,196,107,.45); }
+.btn-primary .key { color: var(--green); border-color: rgba(87,217,147,.45); }
 .btn-primary { background: rgba(87,217,147,.14); border-color: rgba(87,217,147,.4); color: var(--green); }
 .btn-primary:hover { background: rgba(87,217,147,.22); }
 .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
