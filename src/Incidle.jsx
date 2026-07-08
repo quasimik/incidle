@@ -226,6 +226,7 @@ export default function Incidle() {
     setStaged(ans);
     setQuery(ans.name);
     setSelIdx(0);
+    inputRef.current?.focus(); // keep enter-to-submit working after a click
   }
 
   function onKeyDown(e) {
