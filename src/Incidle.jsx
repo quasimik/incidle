@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import uFuzzy from "@leeoniya/ufuzzy";
 
 // ---------------------------------------------------------------------------
 // ANSWER LIST — fixed taxonomy of root causes. Guesses are selected from this
@@ -103,17 +104,53 @@ const CASES = [
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+// Fuzzy matching via uFuzzy: single-error typo tolerance within terms,
+// out-of-order terms. Haystack rows are each answer's name plus each alias,
+// mapped back to the answer; best-ranked row wins per answer.
+const uf = new uFuzzy({ intraMode: 1, intraIns: 1, intraSub: 1, intraTrn: 1, intraDel: 1 });
+const HAY = [];
+const HAY_ANS = []; // parallel to HAY: { a, alias } — alias null on name rows
+for (const a of ANSWERS) {
+  HAY.push(a.name);
+  HAY_ANS.push({ a, alias: null });
+  for (const al of a.aliases) {
+    HAY.push(al);
+    HAY_ANS.push({ a, alias: al });
+  }
+}
+
+// suggestions: [{ a, alias, ranges }] — ranges are [from,to) pairs into the
+// matched string (the name, or the alias when the hit came from one)
 function matchAnswers(q) {
-  const s = q.trim().toLowerCase();
+  const s = q.trim();
   if (!s) return [];
-  const scored = ANSWERS.map((a) => {
-    const hay = [a.name, ...a.aliases].map((x) => x.toLowerCase());
-    const starts = hay.some((x) => x.startsWith(s));
-    const inc = hay.some((x) => x.includes(s));
-    return { a, score: starts ? 2 : inc ? 1 : 0 };
-  }).filter((x) => x.score > 0);
-  scored.sort((x, y) => y.score - x.score || x.a.name.localeCompare(y.a.name));
-  return scored.slice(0, 7).map((x) => x.a);
+  const [idxs, info, order] = uf.search(HAY, s, 3);
+  if (!idxs || idxs.length === 0) return [];
+  const out = [];
+  const seen = new Set();
+  for (const oi of order ?? idxs.map((_, i) => i)) {
+    const hi = info ? info.idx[oi] : idxs[oi];
+    const { a, alias } = HAY_ANS[hi];
+    if (seen.has(a.id)) continue;
+    seen.add(a.id);
+    out.push({ a, alias, ranges: info ? info.ranges[oi] : null });
+    if (out.length === 7) break;
+  }
+  return out;
+}
+
+// wrap matched ranges in <mark>
+function highlight(text, ranges) {
+  if (!ranges || ranges.length === 0) return text;
+  const out = [];
+  let pos = 0;
+  for (let i = 0; i < ranges.length; i += 2) {
+    if (ranges[i] > pos) out.push(text.slice(pos, ranges[i]));
+    out.push(<mark key={i}>{text.slice(ranges[i], ranges[i + 1])}</mark>);
+    pos = ranges[i + 1];
+  }
+  out.push(text.slice(pos));
+  return out;
 }
 
 // `code` spans in feed text — odd-index segments sit inside backticks.
@@ -231,7 +268,7 @@ export default function Incidle() {
     if (e.key === "Enter") {
       e.preventDefault();
       if (staged) handleGuess(staged);
-      else if (suggestions.length > 0) confirmPick(suggestions[sel]);
+      else if (suggestions.length > 0) confirmPick(suggestions[sel].a);
       else if (query.trim() === "" && !e.repeat && Date.now() - lastGuessAt.current > 400) handleInvestigate();
       return;
     }
@@ -251,7 +288,7 @@ export default function Incidle() {
       setSelIdx(Math.max(sel - 1, 0));
     } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= suggestions.length) {
       e.preventDefault();
-      confirmPick(suggestions[Number(e.key) - 1]);
+      confirmPick(suggestions[Number(e.key) - 1].a);
     }
   }
 
@@ -380,18 +417,21 @@ export default function Incidle() {
               />
               {!staged && suggestions.length > 0 && (
                 <ul className="combo-list" role="listbox">
-                  {suggestions.map((a, i) => {
-                    const used = guessedIds.includes(a.id);
+                  {suggestions.map((sug, i) => {
+                    const used = guessedIds.includes(sug.a.id);
                     return (
-                      <li key={a.id}>
+                      <li key={sug.a.id}>
                         <button
                           className={`combo-opt ${i === sel ? "combo-opt-sel" : ""} ${used ? "combo-opt-used" : ""}`}
-                          onClick={() => confirmPick(a)}
+                          onClick={() => confirmPick(sug.a)}
                           disabled={used}
                         >
                           <span className="opt-main">
                             <kbd className="key">{i + 1}</kbd>
-                            {a.name}
+                            <span>{sug.alias ? sug.a.name : highlight(sug.a.name, sug.ranges)}</span>
+                            {sug.alias && (
+                              <span className="alias-hit">{highlight(sug.alias, sug.ranges)}</span>
+                            )}
                             {used && <span className="used-note"> — rejected</span>}
                           </span>
                           {i === sel && !used && <span className="enter-hint">↵</span>}
@@ -572,6 +612,9 @@ const CSS = `
   font-size: 11px;
   color: var(--muted); vertical-align: middle;
 }
+.combo-opt mark { background: none; color: var(--cyan); font-weight: 600; }
+.alias-hit { color: var(--muted); font-size: 12.5px; }
+.alias-hit::before { content: "· "; }
 .used-note { font-size: 12.5px; }
 .enter-hint { color: var(--muted); font-size: 12.5px; }
 
