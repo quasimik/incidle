@@ -278,20 +278,20 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
                 <Link className="menu-item" href="/archive" onClick={() => setMenuOpen(false)}>
                   archive
                 </Link>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowHelp(true);
+                  }}
+                >
+                  help
+                </button>
               </nav>
             )}
           </div>
           <Link className="brand" href="/">{title}</Link>
           {sub && <span className="svc">{sub}</span>}
-          <span className={`sev sev-${c.sev}`}>SEV{c.sev}</span>
-          <button
-            className="help-btn"
-            onClick={() => setShowHelp(true)}
-            aria-label="How to play"
-            title="How to play"
-          >
-            ?
-          </button>
         </div>
         <div className="budget" aria-label="hour budget">
           {Array.from({ length: HOURS }, (_, i) => (

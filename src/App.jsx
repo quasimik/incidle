@@ -151,7 +151,7 @@ function CustomGame({ answers, id }) {
       key={id}
       answers={answers}
       incident={incident}
-      title={`INCIDLE ${id}`}
+      sub={id}
       shareTag={`incidle ${id}`}
       shareUrl={`https://incidle.com/a/${id}`}
       storageKey={id}
