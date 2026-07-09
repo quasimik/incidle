@@ -159,6 +159,11 @@ function rich(text) {
 
 const HOURS = 7; // time budget per incident; one action = one hour
 
+// Touch devices get no auto-focus or programmatic refocus of the search input:
+// popping the on-screen keyboard uninvited costs half the viewport.
+const CAN_HOVER =
+  typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
+
 const TAG = {
   page: { label: "PAGE", cls: "tag-page" },
   clue: { label: "OBSERVED", cls: "tag-clue" },
@@ -250,11 +255,15 @@ function Game({ answers }) {
     feedEndRef.current?.scrollIntoView({ block: "end" });
   }, [feed, status]);
 
+  function focusInput() {
+    if (CAN_HOVER) inputRef.current?.focus();
+  }
+
   function dismissHelp() {
     setShowHelp(false);
     try { localStorage.setItem("incidle:intro-seen", "1"); } catch {}
     // hand focus back to the search input the modal was covering
-    setTimeout(() => inputRef.current?.focus(), 0);
+    setTimeout(focusInput, 0);
   }
 
   useEffect(() => {
@@ -305,7 +314,7 @@ function Game({ answers }) {
     const newActions = [...actions, "obs"];
     setActions(newActions);
     settle([...feed, { type: "clue", time: eventTime(newActions.length), text: c.clues[revealed] }], newActions);
-    inputRef.current?.focus(); // a button click shouldn't strand focus off the input
+    focusInput(); // a button click shouldn't strand focus off the input
   }
 
 
@@ -342,7 +351,7 @@ function Game({ answers }) {
     setStaged(ans);
     setQuery(ans.name);
     setSelIdx(0);
-    inputRef.current?.focus(); // keep enter-to-submit working after a click
+    focusInput(); // keep enter-to-submit working after a click
   }
 
   function onKeyDown(e) {
@@ -384,7 +393,7 @@ function Game({ answers }) {
     setSelIdx(0);
     setStaged(null);
     setCopied(false);
-    setTimeout(() => inputRef.current?.focus(), 50);
+    setTimeout(focusInput, 50);
   }
 
   function shareText() {
@@ -503,7 +512,7 @@ function Game({ answers }) {
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => setInputFocused(false)}
                 aria-label="guess root cause"
-                autoFocus
+                autoFocus={CAN_HOVER}
               />
               {!inputFocused ? (
                 <kbd className="key combo-focus-hint" aria-hidden="true">↵</kbd>
@@ -615,7 +624,9 @@ const CSS = `
   --bg: #0d1220; --panel: #151c2c; --line: #232d42;
   --text: #d7deea; --muted: #7c8aa0;
   --red: #ff6b6b; --amber: #ffc46b; --cyan: #6bd5e8; --green: #57d993;
-  min-height: 100vh; display: flex; flex-direction: column;
+  /* dvh tracks the collapsing mobile URL bar; the feed scrolls internally so
+     the dock stays pinned to the real bottom of the screen */
+  height: 100vh; height: 100dvh; display: flex; flex-direction: column;
   background: var(--bg); color: var(--text);
   font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px;
 }
@@ -662,7 +673,7 @@ const CSS = `
   color: var(--muted);
 }
 
-.feed { flex: 1; overflow-y: auto; padding: 18px 16px 24px; max-width: 860px; width: 100%; margin: 0 auto; }
+.feed { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 16px 24px; max-width: 860px; width: 100%; margin: 0 auto; }
 .entry {
   display: grid; grid-template-columns: 26px 88px 1fr; gap: 10px; align-items: baseline;
   padding: 9px 10px; border-radius: 6px; margin-bottom: 6px;
@@ -748,7 +759,8 @@ const CSS = `
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .modal {
-  width: 100%; max-width: 460px; padding: 22px 22px 20px;
+  width: 100%; max-width: 460px; max-height: 100%; overflow-y: auto;
+  padding: 22px 22px 20px;
   border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
   box-shadow: 0 20px 60px rgba(0,0,0,.5);
   animation: modal-in .24s ease-out;
@@ -790,6 +802,7 @@ const CSS = `
 
 .dock {
   display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 28px;
+  padding-bottom: max(28px, calc(14px + env(safe-area-inset-bottom)));
   border-top: 1px solid var(--line);
   background: var(--panel); max-width: 860px; width: 100%; margin: 0 auto;
   position: relative;
@@ -877,5 +890,29 @@ const CSS = `
 @media (max-width: 560px) {
   .entry { grid-template-columns: 42px 1fr; }
   .entry .text { grid-column: 1 / -1; }
+  .hdr { padding: 10px 12px; }
+  .budget { padding: 8px 12px; flex-wrap: wrap; row-gap: 4px; }
+  .pip { width: 16px; }
+  .budget-label { font-size: 12px; }
+  .feed { padding: 14px 12px 18px; }
+  .post { padding: 13px 14px; }
+  .callout { padding: 11px 12px; }
+  .dock { padding-left: 12px; padding-right: 12px; }
+  /* input on its own row, action button full-width beneath it */
+  .dock-row { flex-wrap: wrap; }
+  .combo { flex: 1 1 100%; }
+  .action-btn { flex: 1; min-width: 0; }
+  .combo-input { font-size: 16px; } /* <16px triggers iOS focus-zoom */
+  .combo-list { max-height: min(300px, 38dvh); } /* stay clear of the keyboard */
+}
+
+/* Touch devices: keyboard hints (enter / esc / number keys) are dead weight. */
+@media (hover: none) {
+  .combo-focus-hint, .combo-clear-hint, .enter-hint,
+  .combo-opt .key, .action-btn .key { display: none; }
+  .combo-input-blurred { padding-right: 13px; }
+  .combo-input-clearable { padding-right: 13px; }
+  .combo-more { padding-left: 11px; }
+  .combo-opt { padding-top: 11px; padding-bottom: 11px; } /* bigger tap targets */
 }
 `;
