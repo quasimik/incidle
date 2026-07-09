@@ -89,6 +89,7 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
     catch { return true; }
   });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const menuRef = useRef(null);
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -168,12 +169,19 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
     return () => window.removeEventListener("keydown", onKey);
   }, [showHelp]);
 
+  useEffect(() => {
+    if (!showAbout) return;
+    const onKey = (e) => e.key === "Escape" && setShowAbout(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAbout]);
+
   // Enter re-captures the search input when focus has drifted to a
   // non-interactive element (e.g. after clicking blank feed space). Real
   // controls keep their own Enter behavior; the input handles its own when
   // already focused.
   useEffect(() => {
-    if (status !== "active" || showHelp) return;
+    if (status !== "active" || showHelp || showAbout) return;
     const onKey = (e) => {
       if (e.key !== "Enter") return;
       const el = inputRef.current;
@@ -353,6 +361,15 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
                   }}
                 >
                   help
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowAbout(true);
+                  }}
+                >
+                  about
                 </button>
               </nav>
             )}
@@ -564,6 +581,24 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
             <button className="btn btn-primary modal-btn" onClick={dismissHelp} autoFocus>
               start triage →
             </button>
+          </div>
+        </div>
+      )}
+
+      {showAbout && (
+        <div className="modal-scrim" onClick={() => setShowAbout(false)}>
+          <div
+            className="modal about"
+            role="dialog"
+            aria-modal="true"
+            aria-label="About"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="about-spark">✨</div>
+            <p className="about-line">made in san francisco by michael</p>
+            <a className="about-link" href="https://mic.hael.me" target="_blank" rel="noopener noreferrer">
+              mic.hael.me
+            </a>
           </div>
         </div>
       )}
