@@ -562,7 +562,11 @@ function Game({ answers }) {
               disabled={investigateMode ? revealed >= maxClues : !staged}
             >
               {investigateMode ? "investigate" : "root-cause"}
-              {(enterInvestigates || staged) && <kbd className="key">↵</kbd>}
+              {CAN_HOVER && (enterInvestigates || staged) ? (
+                <kbd className="key">↵</kbd>
+              ) : (
+                <span className="dot" aria-hidden="true">·</span>
+              )}
               <span className="cost-tag" key={hoursUsed} title="every move burns one hour">1 HOUR</span>
             </button>
           </div>
@@ -817,6 +821,7 @@ const CSS = `
 .action-btn {
   min-width: 152px; display: flex; align-items: center; justify-content: center; gap: 8px;
 }
+.action-btn .dot { opacity: .5; }
 .combo { position: relative; flex: 1; }
 .combo-input {
   width: 100%; padding: 11px 13px; border-radius: 7px;
@@ -909,7 +914,7 @@ const CSS = `
 /* Touch devices: keyboard hints (enter / esc / number keys) are dead weight. */
 @media (hover: none) {
   .combo-focus-hint, .combo-clear-hint, .enter-hint,
-  .combo-opt .key, .action-btn .key { display: none; }
+  .combo-opt .key { display: none; }
   .combo-input-blurred { padding-right: 13px; }
   .combo-input-clearable { padding-right: 13px; }
   .combo-more { padding-left: 11px; }
