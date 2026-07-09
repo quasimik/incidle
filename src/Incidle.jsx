@@ -76,39 +76,52 @@ const CASES = [
 // deliberately not wired into gameplay yet.
 // ---------------------------------------------------------------------------
 // Fuzzy matching via uFuzzy: single-error typo tolerance within terms,
-// out-of-order terms. Haystack rows are each answer's name plus each alias,
-// mapped back to the answer; best-ranked row wins per answer.
+// out-of-order terms. Haystack rows are each answer's name, each alias, and
+// each tag, all mapped back to the answer; best-ranked row wins per answer.
+// Indexing tags makes a whole category queryable at once — e.g. "external"
+// surfaces every external cause (vendor outage, cloud provider outage, …).
 const uf = new uFuzzy({ intraMode: 1, intraIns: 1, intraSub: 1, intraTrn: 1, intraDel: 1 });
 
 function buildMatcher(answers) {
   const answerById = Object.fromEntries(answers.map((a) => [a.id, a]));
   const hay = [];
-  const hayAns = []; // parallel to hay: { a, alias } — alias null on name rows
+  const hayAns = []; // parallel to hay: { a, hit, kind } — hit null on name rows
   for (const a of answers) {
     hay.push(a.name);
-    hayAns.push({ a, alias: null });
+    hayAns.push({ a, hit: null, kind: "name" });
     for (const al of a.aliases) {
       hay.push(al);
-      hayAns.push({ a, alias: al });
+      hayAns.push({ a, hit: al, kind: "alias" });
+    }
+    for (const t of a.tags) {
+      hay.push(t);
+      hayAns.push({ a, hit: t, kind: "tag" });
     }
   }
 
-  // suggestions: [{ a, alias, ranges }] — ranges are [from,to) pairs into the
-  // matched string (the name, or the alias when the hit came from one)
+  // suggestions: [{ a, hit, kind, ranges }] — kind is "name" | "alias" | "tag";
+  // ranges are [from,to) pairs into the matched string (name / alias / tag).
+  // Two tiers so tags stay lower-priority: name/alias rows fill slots first
+  // (in uFuzzy's rank order), then tag rows take any that remain. A tag hit
+  // thus never displaces a name/alias match, and only appears when there's
+  // room — and answers that match both surface via their name/alias.
   function matchAnswers(q) {
     const s = q.trim();
     if (!s) return [];
     const [idxs, info, order] = uf.search(hay, s, 3);
     if (!idxs || idxs.length === 0) return [];
+    const ordered = order ?? idxs.map((_, i) => i);
     const out = [];
     const seen = new Set();
-    for (const oi of order ?? idxs.map((_, i) => i)) {
-      const hi = info ? info.idx[oi] : idxs[oi];
-      const { a, alias } = hayAns[hi];
-      if (seen.has(a.id)) continue;
-      seen.add(a.id);
-      out.push({ a, alias, ranges: info ? info.ranges[oi] : null });
-      if (out.length === 7) break;
+    for (const tier of [["name", "alias"], ["tag"]]) {
+      for (const oi of ordered) {
+        if (out.length === 7) return out;
+        const hi = info ? info.idx[oi] : idxs[oi];
+        const { a, hit, kind } = hayAns[hi];
+        if (!tier.includes(kind) || seen.has(a.id)) continue;
+        seen.add(a.id);
+        out.push({ a, hit, kind, ranges: info ? info.ranges[oi] : null });
+      }
     }
     return out;
   }
@@ -447,9 +460,12 @@ function Game({ answers }) {
                         >
                           <span className="opt-main">
                             <kbd className="key">{i + 1}</kbd>
-                            <span>{sug.alias ? sug.a.name : highlight(sug.a.name, sug.ranges)}</span>
-                            {sug.alias && (
-                              <span className="alias-hit">{highlight(sug.alias, sug.ranges)}</span>
+                            <span>{sug.kind === "name" ? highlight(sug.a.name, sug.ranges) : sug.a.name}</span>
+                            {sug.kind === "alias" && (
+                              <span className="alias-hit">{highlight(sug.hit, sug.ranges)}</span>
+                            )}
+                            {sug.kind === "tag" && (
+                              <span className="tag-hit">{highlight(sug.hit, sug.ranges)}</span>
                             )}
                             {used && <span className="used-note"> — rejected</span>}
                           </span>
@@ -639,6 +655,8 @@ const CSS = `
 .combo-opt mark { background: none; color: var(--cyan); font-weight: 600; }
 .alias-hit { color: var(--muted); font-size: 12.5px; }
 .alias-hit::before { content: "· "; }
+.tag-hit { color: var(--muted); font-size: 12.5px; }
+.tag-hit::before { content: "#"; opacity: 0.55; }
 .used-note { font-size: 12.5px; }
 .enter-hint { color: var(--muted); font-size: 12.5px; }
 
