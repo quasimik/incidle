@@ -435,20 +435,19 @@ function Game({ answers }) {
             ?
           </button>
         </div>
+        <div className="budget" aria-label="hour budget">
+          {Array.from({ length: HOURS }, (_, i) => (
+            <span key={i} className={`pip ${actions[i] ? `pip-${actions[i]}` : ""}`} />
+          ))}
+          <span className="budget-label">
+            {status === "active"
+              ? `${HOURS - hoursUsed} hour${HOURS - hoursUsed === 1 ? "" : "s"} until escalation`
+              : status === "solved"
+              ? `resolved at T+${hoursUsed}`
+              : `escalated at T+${HOURS}`}
+          </span>
+        </div>
       </header>
-
-      <div className="budget" aria-label="hour budget">
-        {Array.from({ length: HOURS }, (_, i) => (
-          <span key={i} className={`pip ${actions[i] ? `pip-${actions[i]}` : ""}`} />
-        ))}
-        <span className="budget-label">
-          {status === "active"
-            ? `${HOURS - hoursUsed} hour${HOURS - hoursUsed === 1 ? "" : "s"} until escalation`
-            : status === "solved"
-            ? `resolved at T+${hoursUsed}`
-            : `escalated at T+${HOURS}`}
-        </span>
-      </div>
 
       <main className="feed" aria-live="polite">
         <div className="post post-sys">
@@ -662,10 +661,7 @@ const CSS = `
 .sev-2 { background: rgba(255,196,107,.15); color: var(--amber); border: 1px solid rgba(255,196,107,.4); }
 .sev-3 { background: rgba(107,213,232,.12); color: var(--cyan); border: 1px solid rgba(107,213,232,.35); }
 
-.budget {
-  display: flex; align-items: center; gap: 6px; padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-}
+.budget { display: flex; align-items: center; gap: 6px; }
 .pip { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
 .pip-obs { background: var(--cyan); }
 .pip-wrong { background: var(--red); }
@@ -895,14 +891,26 @@ const CSS = `
 @media (max-width: 560px) {
   .entry { grid-template-columns: 42px 1fr; }
   .entry .text { grid-column: 1 / -1; }
-  .hdr { padding: 10px 12px; }
-  .budget { padding: 8px 12px; flex-wrap: wrap; row-gap: 4px; }
-  .pip { width: 16px; }
-  .budget-label { font-size: 12px; }
-  .feed { padding: 14px 12px 18px; }
+  /* single-row header: brand + sev left, pips right; the label is redundant
+     with the unfilled pips, so it drops to screen-reader-only */
+  .hdr { padding: 8px 12px; }
+  .hdr-left { gap: 8px; }
+  .brand { letter-spacing: 0.12em; }
+  .budget { gap: 5px; }
+  .pip { width: 12px; }
+  .budget-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+  .feed { padding: 12px 12px 16px; }
+  .entry { padding: 8px 9px; margin-bottom: 4px; }
   .post { padding: 13px 14px; }
   .callout { padding: 11px 12px; }
-  .dock { padding-left: 12px; padding-right: 12px; }
+  .dock {
+    gap: 8px; padding: 8px 12px;
+    padding-bottom: max(16px, calc(10px + env(safe-area-inset-bottom)));
+  }
+  .dock-row { gap: 8px; }
   /* input on its own row, action button full-width beneath it */
   .dock-row { flex-wrap: wrap; }
   .combo { flex: 1 1 100%; }
