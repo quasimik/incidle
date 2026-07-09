@@ -589,6 +589,16 @@ function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, storageK
     }
   }
 
+  async function shareResult() {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: shareText() });
+      } catch {} // user dismissed the share sheet
+    } else {
+      copyShare();
+    }
+  }
+
   const done = status !== "active";
   // one action button: investigate on empty field, guess otherwise
   const investigateMode = query.trim() === "";
@@ -673,13 +683,22 @@ function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, storageK
             <p className="post-body">{rich(c.postmortem)}</p>
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
-                {copied ? "copied ✓" : "copy result"}
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                {copied ? "copied ✓" : "copy"}
               </button>
-              <a className="btn btn-primary" href="#/archive">
-                more incidents →
-              </a>
+              <button className="btn btn-primary" onClick={shareResult}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                </svg>
+                share
+              </button>
             </div>
-            <pre className="share-preview">{shareText()}</pre>
           </div>
           );
         })()}
@@ -944,11 +963,7 @@ const CSS = `
   font-family: 'Inter', system-ui, sans-serif; color: var(--text);
 }
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.share-preview {
-  margin: 14px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--bg);
-  border: 1px solid var(--line); color: var(--muted);
-  font-size: 12.5px; white-space: pre-wrap;
-}
+.post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 
 .modal-scrim {
   position: fixed; inset: 0; z-index: 50; padding: 20px;
