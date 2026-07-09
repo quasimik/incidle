@@ -1,40 +1,17 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import uFuzzy from "@leeoniya/ufuzzy";
+import ROOT_CAUSES from "../incident_root_causes.json";
 
 // ---------------------------------------------------------------------------
-// ANSWER LIST — fixed taxonomy of root causes. Guesses are selected from this
-// list (autocomplete), so alias-matching problems never occur.
+// ANSWER LIST — fixed taxonomy of root causes, loaded from the data file.
+// Guesses are selected from this list (autocomplete), so alias-matching
+// problems never occur. Each entry: id, name, aliases, description, tags
+// (sorted important-first; tags[0] is the primary group, and an `external`
+// first tag marks causes outside the team's control), plus four diagnostic
+// axes (detection_signal, onset_shape, correlation, blast_radius) that are
+// deliberately not wired into gameplay yet.
 // ---------------------------------------------------------------------------
-const ANSWERS = [
-  { id: "connection-pool-exhaustion", name: "Connection pool exhaustion", aliases: ["connection leak", "leaked connections", "db connections maxed", "pool exhaustion"] },
-  { id: "cert-expiry", name: "Expired TLS certificate", aliases: ["cert expiry", "certificate expired", "tls cert", "mtls cert expired"] },
-  { id: "cache-stampede", name: "Cache stampede", aliases: ["dogpile", "cache dogpile", "thundering herd on cache"] },
-  { id: "retry-storm", name: "Retry storm", aliases: ["retry amplification", "cascading retries"] },
-  { id: "memory-leak", name: "Memory leak", aliases: ["oom", "oom kill", "unbounded memory growth"] },
-  { id: "hot-partition", name: "Hot partition", aliases: ["hot key", "hot shard", "partition skew", "data skew"] },
-  { id: "disk-full", name: "Disk full", aliases: ["no space left on device", "log rotation failure", "full disk"] },
-  { id: "stale-dns", name: "Stale DNS cache", aliases: ["dns caching", "dns ttl", "cached dns after failover"] },
-  { id: "clock-skew", name: "Clock skew", aliases: ["ntp drift", "time drift", "clock drift"] },
-  { id: "n-plus-one", name: "N+1 queries", aliases: ["n plus one", "n+1", "orm query amplification"] },
-  { id: "ddos", name: "DDoS attack", aliases: ["denial of service", "volumetric attack"] },
-  { id: "bad-migration", name: "Bad database migration", aliases: ["locking migration", "schema migration lock"] },
-  { id: "deadlock", name: "Database deadlock", aliases: ["lock contention", "deadlock"] },
-  { id: "thread-pool", name: "Thread pool exhaustion", aliases: ["worker starvation", "thread starvation"] },
-  { id: "gc-pause", name: "GC pauses", aliases: ["garbage collection", "stop the world"] },
-  { id: "network-partition", name: "Network partition", aliases: ["split network", "partition between zones"] },
-  { id: "third-party-rate-limit", name: "Third-party rate limiting", aliases: ["429 from provider", "api rate limit"] },
-  { id: "expired-api-key", name: "Expired credentials / API key", aliases: ["revoked credentials", "expired api key", "expired token secret"] },
-  { id: "dns-outage", name: "DNS provider outage", aliases: ["dns down", "resolver outage"] },
-  { id: "queue-backlog", name: "Queue backlog / slow consumer", aliases: ["consumer lag", "queue buildup"] },
-  { id: "config-typo", name: "Bad config change", aliases: ["config typo", "misconfiguration"] },
-  { id: "feature-flag", name: "Feature flag misfire", aliases: ["flag rollout bug", "bad flag"] },
-  { id: "cpu-throttling", name: "CPU throttling", aliases: ["cfs throttling", "cpu limits"] },
-  { id: "noisy-neighbor", name: "Noisy neighbor", aliases: ["shared host contention", "co-tenant interference"] },
-  { id: "cache-eviction", name: "Cache eviction pressure", aliases: ["redis evictions", "eviction storm"] },
-  { id: "split-brain", name: "Split brain", aliases: ["dual primary", "two leaders"] },
-  { id: "dependency-outage", name: "Downstream dependency outage", aliases: ["provider outage", "upstream service down"] },
-  { id: "bad-deploy", name: "Bad deploy / code regression", aliases: ["bad release", "regression", "buggy deploy"] },
-];
+const ANSWERS = ROOT_CAUSES.root_causes;
 const answerById = Object.fromEntries(ANSWERS.map((a) => [a.id, a]));
 
 // ---------------------------------------------------------------------------
@@ -60,8 +37,8 @@ const CASES = [
       "Deploy log: `promo-svc` shipped 25 minutes ago. Different team. No shared code with payments.",
       "Postgres (payments db): active connections pinned at 500/500. Most are `idle in transaction` — owned by `promo-svc`.",
     ],
-    answerId: "connection-pool-exhaustion",
-    nearIds: ["bad-deploy", "thread-pool"],
+    answerId: "connection_pool_exhaustion",
+    nearIds: ["bad_code_deploy", "thread_pool_exhaustion"],
     postmortem:
       "`promo-svc` and `payments-svc` share a database. The new coupon path leaked connections (opened transactions, never closed), pinning the pool at max and starving `payments-svc` — which failed while looking perfectly healthy itself. Fix: roll back, add an idle-in-transaction timeout, and give each service its own pool with a hard cap.",
   },
@@ -77,8 +54,8 @@ const CASES = [
       "Redis is healthy overall, but the hit rate for one key drops to zero at each spike, then recovers.",
       "The `top_sellers` key: TTL 900 seconds, no jitter. Recomputing it takes about 8 seconds.",
     ],
-    answerId: "cache-stampede",
-    nearIds: ["cache-eviction"],
+    answerId: "cache_stampede",
+    nearIds: ["cache_hit_rate_collapse"],
     postmortem:
       "Classic stampede: a popular cache key expires on a fixed TTL, and every concurrent request recomputes the expensive value simultaneously, hammering the database until one write repopulates the key. Fix: TTL jitter, a recompute lock or single-flight, or serve-stale-while-revalidate.",
   },
@@ -94,8 +71,8 @@ const CASES = [
       "`chrony` isn't running on pool C — a hardening script disabled the wrong unit across that pool.",
       "Drift accumulates ~2s/day. The 401 rate has been creeping upward for six weeks and nobody connected the dots.",
     ],
-    answerId: "clock-skew",
-    nearIds: ["expired-api-key"],
+    answerId: "clock_skew",
+    nearIds: ["credential_expiry"],
     postmortem:
       "With NTP dead on one pool, its clocks drifted until freshly-issued tokens appeared to come from the future and failed validation — sporadically, because only requests landing on pool C failed. Fix: restore time sync, alert on clock offset directly, and treat 'works on retry' as a load-balancer-shaped clue.",
   },
