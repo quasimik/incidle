@@ -1,4 +1,3 @@
-import { INCIDENTS } from "./incidents.js";
 import { DAILY_EPOCH, dayNumber, addDays, fmtShort } from "./daily.js";
 import { loadRun } from "./runs.js";
 import { Link } from "./router.jsx";
@@ -11,7 +10,7 @@ function runStatus(run) {
   return <span className="arch-status arch-progress">T+{run.a.length} · in progress</span>;
 }
 
-export default function Archive({ today }) {
+export default function Archive({ today, incidents }) {
   const todayNum = Math.max(0, dayNumber(today));
   const days = Array.from({ length: todayNum + 1 }, (_, i) => todayNum - i);
   return (
@@ -28,7 +27,7 @@ export default function Archive({ today }) {
       <main className="feed">
         <ul className="arch-list">
           {days.map((n) => {
-            const inc = INCIDENTS[n % INCIDENTS.length];
+            const inc = incidents[n % incidents.length];
             return (
               <li key={n}>
                 <Link className="arch-row" href={n === todayNum ? "/" : `/archive/${n + 1}`}>

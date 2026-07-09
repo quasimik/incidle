@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { HOURS } from "./incidents.js";
 import { buildMatcher } from "./matcher.js";
 import { loadRun, saveRun } from "./runs.js";
 import { Link } from "./router.jsx";
 import { highlight, rich } from "./text.jsx";
+
+export const HOURS = 7; // time budget per incident; one action = one hour
 
 // Touch devices get no auto-focus or programmatic refocus of the search input:
 // popping the on-screen keyboard uninvited costs half the viewport.

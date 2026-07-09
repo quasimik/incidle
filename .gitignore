@@ -4,5 +4,6 @@ dist
 *.local
 .DS_Store
 .env*
-# answer data lives in Neon now; local copy is just seed/authoring input
+# answer + incident data lives in Neon now; local copies are just seed/authoring input
 incident_root_causes.json
+incidents.json
