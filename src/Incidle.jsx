@@ -82,6 +82,11 @@ const CASES = [
 // surfaces every external cause (vendor outage, cloud provider outage, …).
 const uf = new uFuzzy({ intraMode: 1, intraIns: 1, intraSub: 1, intraTrn: 1, intraDel: 1 });
 
+// Only the first HOTKEYS matches are shown, each with a number-key shortcut;
+// any beyond that collapse into a "-- N more --" hint. The list stays short and
+// every visible option is pressable — narrow the query to surface the rest.
+const HOTKEYS = 6;
+
 function buildMatcher(answers) {
   const answerById = Object.fromEntries(answers.map((a) => [a.id, a]));
   const hay = [];
@@ -99,31 +104,32 @@ function buildMatcher(answers) {
     }
   }
 
-  // suggestions: [{ a, hit, kind, ranges }] — kind is "name" | "alias" | "tag";
-  // ranges are [from,to) pairs into the matched string (name / alias / tag).
+  // Returns { items, more }: items is up to HOTKEYS matches, each
+  // { a, hit, kind, ranges } — kind is "name" | "alias" | "tag", ranges are
+  // [from,to) pairs into the matched string (name / alias / tag); more is the
+  // count of further distinct matches, shown only as a "-- N more --" hint.
   // Two tiers so tags stay lower-priority: name/alias rows fill slots first
   // (in uFuzzy's rank order), then tag rows take any that remain. A tag hit
   // thus never displaces a name/alias match, and only appears when there's
   // room — and answers that match both surface via their name/alias.
   function matchAnswers(q) {
     const s = q.trim();
-    if (!s) return [];
+    if (!s) return { items: [], more: 0 };
     const [idxs, info, order] = uf.search(hay, s, 3);
-    if (!idxs || idxs.length === 0) return [];
+    if (!idxs || idxs.length === 0) return { items: [], more: 0 };
     const ordered = order ?? idxs.map((_, i) => i);
-    const out = [];
+    const all = [];
     const seen = new Set();
     for (const tier of [["name", "alias"], ["tag"]]) {
       for (const oi of ordered) {
-        if (out.length === 7) return out;
         const hi = info ? info.idx[oi] : idxs[oi];
         const { a, hit, kind } = hayAns[hi];
         if (!tier.includes(kind) || seen.has(a.id)) continue;
         seen.add(a.id);
-        out.push({ a, hit, kind, ranges: info ? info.ranges[oi] : null });
+        all.push({ a, hit, kind, ranges: info ? info.ranges[oi] : null });
       }
     }
-    return out;
+    return { items: all.slice(0, HOTKEYS), more: Math.max(0, all.length - HOTKEYS) };
   }
 
   return { answerById, matchAnswers };
@@ -223,7 +229,7 @@ function Game({ answers }) {
   const maxClues = c.clues.length;
   const revealed = actions.filter((a) => a === "obs").length;
   const hoursUsed = actions.length;
-  const suggestions = useMemo(() => matchAnswers(query), [query, matchAnswers]);
+  const { items: suggestions, more } = useMemo(() => matchAnswers(query), [query, matchAnswers]);
   const sel = Math.min(selIdx, Math.max(suggestions.length - 1, 0));
 
   function initialFeed(idx) {
@@ -474,6 +480,11 @@ function Game({ answers }) {
                       </li>
                     );
                   })}
+                  {more > 0 && (
+                    <li className="combo-more" aria-hidden="true">
+                      -- {more} more --
+                    </li>
+                  )}
                 </ul>
               )}
             </div>
@@ -651,6 +662,12 @@ const CSS = `
   border: 1px solid var(--line); border-bottom-width: 3px;
   font-size: 11px;
   color: var(--muted); vertical-align: middle;
+}
+.combo-more {
+  color: var(--muted); font-size: 11.5px; letter-spacing: 0.08em; line-height: 19px;
+  /* match a result row's height (9px pad + 19px content) and left-align with the
+     label column: combo-opt padding-left (11px) + .key box (19px) + gap (9px) */
+  padding: 9px 11px 9px calc(11px + 19px + 9px);
 }
 .combo-opt mark { background: none; color: var(--cyan); font-weight: 600; }
 .alias-hit { color: var(--muted); font-size: 12.5px; }
