@@ -100,7 +100,7 @@ function fmtShort(dateStr) {
 
 // ---------------------------------------------------------------------------
 // SAVED RUNS — one localStorage entry per incident: { s: status, a: actions,
-// g: guessed ids in order }, keyed by the daily's date. Saved mid-game too,
+// g: guessed ids in order }, keyed by the daily's number. Saved mid-game too,
 // so a reload or a trip to the archive resumes where you were — and a
 // finished daily stays finished, Wordle-style.
 // ---------------------------------------------------------------------------
@@ -119,13 +119,14 @@ function saveRun(key, run) {
 
 // ---------------------------------------------------------------------------
 // ROUTES — hash-based so no server rewrites are needed:
-//   #/            today's daily
-//   #/day/<date>  a past daily (epoch..today)
-//   #/archive     past dailies
+//   #/             today's daily
+//   #/archive/<n>  a past daily by number (1..today's)
+//   #/archive      past dailies
 // ---------------------------------------------------------------------------
 function parseHash(h) {
   if (h === "#/archive") return { view: "archive" };
-  if (h.startsWith("#/day/")) return { view: "day", date: h.slice(6) };
+  const m = h.match(/^#\/archive\/(\d+)$/);
+  if (m) return { view: "day", num: Number(m[1]) };
   return { view: "today" };
 }
 function useRoute() {
@@ -296,19 +297,17 @@ function App({ answers }) {
 
   if (route.view === "archive") return <Archive today={today} />;
 
-  const date = route.view === "day" ? route.date : today;
-  const n =
-    route.view === "day" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? dayNumber(date) : todayNum;
+  const n = route.view === "day" ? route.num - 1 : todayNum;
   if (n >= 0 && n <= todayNum)
     return (
       <Game
-        key={`d${date}`}
+        key={`d${n}`}
         answers={answers}
         incident={INCIDENTS[n % INCIDENTS.length]}
         title={`INCIDLE #${n + 1}`}
-        sub={date === today ? null : fmtShort(date)}
+        sub={n === todayNum ? null : fmtShort(addDays(DAILY_EPOCH, n))}
         shareTag={`incidle #${n + 1}`}
-        storageKey={date}
+        storageKey={n + 1}
       />
     );
   return <RedirectHome />;
@@ -337,7 +336,7 @@ function Archive({ today }) {
       <style>{CSS}</style>
       <header className="hdr">
         <div className="hdr-left">
-          <span className="brand">INCIDLE</span>
+          <a className="brand" href="#/">INCIDLE</a>
           <span className="svc">archive</span>
         </div>
         <a className="hdr-link" href="#/">
@@ -347,16 +346,17 @@ function Archive({ today }) {
       <main className="feed">
         <ul className="arch-list">
           {days.map((n) => {
-            const date = addDays(DAILY_EPOCH, n);
             const inc = INCIDENTS[n % INCIDENTS.length];
             return (
-              <li key={date}>
-                <a className="arch-row" href={n === todayNum ? "#/" : `#/day/${date}`}>
+              <li key={n}>
+                <a className="arch-row" href={n === todayNum ? "#/" : `#/archive/${n + 1}`}>
                   <span className="arch-id">#{n + 1}</span>
-                  <span className="arch-date">{n === todayNum ? "today" : fmtShort(date)}</span>
+                  <span className="arch-date">
+                    {n === todayNum ? "today" : fmtShort(addDays(DAILY_EPOCH, n))}
+                  </span>
                   <span className={`sev sev-${inc.sev}`}>SEV{inc.sev}</span>
                   <span className="arch-vig">{inc.vignette.replace(/^PAGE — /, "")}</span>
-                  {runStatus(loadRun(date))}
+                  {runStatus(loadRun(n + 1))}
                 </a>
               </li>
             );
@@ -628,7 +628,7 @@ function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, storageK
               </nav>
             )}
           </div>
-          <span className="brand">{title}</span>
+          <a className="brand" href="#/">{title}</a>
           {sub && <span className="svc">{sub}</span>}
           <span className={`sev sev-${c.sev}`}>SEV{c.sev}</span>
           <button
@@ -862,7 +862,8 @@ const CSS = `
 /* min-height = the game header's tallest content (21px help button), so
    headers without that button (archive) still render the same bar height */
 .hdr-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 21px; }
-.brand { font-weight: 600; letter-spacing: 0.18em; font-size: 14px; }
+.brand { font-weight: 600; letter-spacing: 0.18em; font-size: 14px; color: inherit; text-decoration: none; }
+a.brand:hover { color: var(--cyan); }
 .help-btn {
   width: 21px; height: 21px; padding: 0; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
