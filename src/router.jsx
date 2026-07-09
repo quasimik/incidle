@@ -3,25 +3,30 @@ import { useState, useEffect } from "react";
 // ---------------------------------------------------------------------------
 // ROUTES — real paths via the History API. Vercel rewrites every request that
 // doesn't match a file or function to /index.html (see vercel.json), so a
-// fresh load of /archive/2 still boots the SPA; the client then renders from
+// fresh load of /a/2 still boots the SPA; the client then renders from
 // location.pathname.
 //   /             today's daily
-//   /archive      past dailies
-//   /archive/<n>  a past daily by number (1..today's)
+//   /archive      played incidents
+//   /a/<n>        a past daily by number (1..today's)
+//   /a/<ic_...>   a custom incident by its share id
 // ---------------------------------------------------------------------------
 export function parsePath(pathname) {
   const p = pathname.replace(/\/+$/, "") || "/";
   if (p === "/archive") return { view: "archive" };
-  const m = p.match(/^\/archive\/(\d+)$/);
-  if (m) return { view: "day", num: Number(m[1]) };
+  const m = p.match(/^\/(?:a|archive)\/([^/]+)$/);
+  if (m && /^\d+$/.test(m[1])) return { view: "day", num: Number(m[1]) };
+  if (m && /^ic_[a-z0-9]+$/.test(m[1])) return { view: "custom", id: m[1] };
   return { view: "today" };
 }
 
-// Links minted before the History-API switch were hash routes (#/archive/2);
-// translate them to real paths before first render so they keep working.
-export function upgradeLegacyHash() {
-  const m = window.location.hash.match(/^#(\/.*)$/);
-  if (m) window.history.replaceState(null, "", m[1]);
+// Links minted before the History-API switch were hash routes (#/archive/2),
+// and day links briefly lived at /archive/<n> before moving to /a/<n>;
+// translate both to current paths before first render so they keep working.
+export function upgradeLegacyUrl() {
+  const hash = window.location.hash.match(/^#(\/.*)$/);
+  if (hash) window.history.replaceState(null, "", hash[1]);
+  const old = window.location.pathname.match(/^\/archive\/(\d+)\/*$/);
+  if (old) window.history.replaceState(null, "", `/a/${old[1]}`);
 }
 
 export function navigate(to, { replace = false } = {}) {

@@ -1,11 +1,16 @@
 import { neon } from "@neondatabase/serverless";
 
 // ---------------------------------------------------------------------------
-// Serves the daily incident pool from Neon (local authoring copy:
-// incidents.json). Wordle-style: day N since DAILY_EPOCH plays
+// Serves the daily incident pool from Neon (authored via incidents.json +
+// scripts/seed-incidents.mjs). Wordle-style: day N since DAILY_EPOCH plays
 // incidents[N % length], so everyone gets the same incident on the same local
 // calendar day and the pool cycles when the calendar outruns it — add
 // incidents faster than the calendar eats them.
+//
+// Only rows with a num are dailies. Custom incidents (num NULL) are reachable
+// solely through their unguessable /a/<ic_...> link (api/incident.js) and must
+// never ride along here — this payload goes to every visitor at boot, and
+// shipping them would let anyone enumerate every secret incident.
 //
 // The paging vignette and the system topology primer are free. Every action
 // after that — revealing an observation or testing a hypothesis (right or
@@ -25,6 +30,7 @@ export default async function handler(req, res) {
     SELECT num, sev, topology, vignette, clues,
            answer_id AS "answerId", near_ids AS "nearIds", postmortem
     FROM incidents
+    WHERE num IS NOT NULL
     ORDER BY num`;
   res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
   res.status(200).json({ incidents: rows });

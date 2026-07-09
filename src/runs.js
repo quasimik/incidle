@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // SAVED RUNS — one localStorage entry per incident: { s: status, a: actions,
-// g: guessed ids in order }, keyed by the daily's number. Saved mid-game too,
-// so a reload or a trip to the archive resumes where you were — and a
-// finished daily stays finished, Wordle-style.
+// g: guessed ids in order, t: started-at ms }, keyed by the daily's number or
+// a custom's ic_ id. Saved mid-game too, so a reload or a trip to the archive
+// resumes where you were — and a finished daily stays finished, Wordle-style.
 // ---------------------------------------------------------------------------
 export function loadRun(key) {
   try {
@@ -15,4 +15,19 @@ export function saveRun(key, run) {
   try {
     localStorage.setItem(`incidle:run:${key}`, JSON.stringify(run));
   } catch {}
+}
+
+// Custom incidents only exist locally as runs — starting one is what puts it
+// in your archive. Newest first; runs predating the t field sort last.
+export function listCustomRuns() {
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const m = localStorage.key(i)?.match(/^incidle:run:(ic_[a-z0-9]+)$/);
+      if (!m) continue;
+      const run = loadRun(m[1]);
+      if (run) out.push({ id: m[1], run });
+    }
+  } catch {}
+  return out.sort((a, b) => (b.run.t ?? 0) - (a.run.t ?? 0));
 }

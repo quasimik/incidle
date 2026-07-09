@@ -47,10 +47,11 @@ function rebuildFeed(inc, run, answerById) {
   return feed;
 }
 
-export default function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, storageKey }) {
+export default function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl, storageKey }) {
   const { answerById, matchAnswers } = useMemo(() => buildMatcher(answers), [answers]);
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
+  const [startedAt] = useState(() => saved?.t ?? Date.now());
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
   );
@@ -82,8 +83,8 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
   // persist the run after every hour-costing action (and on finish)
   useEffect(() => {
     if (actions.length === 0) return;
-    saveRun(storageKey, { s: status, a: actions, g: guessedIds });
-  }, [storageKey, status, actions, guessedIds]);
+    saveRun(storageKey, { s: status, a: actions, g: guessedIds, t: startedAt });
+  }, [storageKey, status, actions, guessedIds, startedAt]);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });
@@ -228,7 +229,9 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
     const sq = { obs: "🟦", wrong: "🟥", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
     const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
-    return `💻 ${shareTag}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
+    // customs are reachable only by their link, so the share must carry it;
+    // dailies stay bare — everyone can find today's on the homepage
+    return `💻 ${shareTag}\n${verdict}\n${squares}\n\n${shareUrl ?? "https://incidle.com"}`;
   }
 
   async function copyShare() {

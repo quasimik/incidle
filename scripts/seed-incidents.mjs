@@ -1,0 +1,68 @@
+// Seed/update the incident pool in Neon from incidents.json (the untracked
+// authoring copy at the repo root). Idempotent: upserts by id, and mints an
+// ic_ id for any entry that lacks one, WRITING IT BACK into the JSON — an
+// already-shared /a/<id> link must never change, so ids live with the entry.
+//
+// Entries with a "num" are dailies (day N plays num-ordered pool[N % length]);
+// entries without one are customs, reachable only via their /a/<id> link and
+// deliberately excluded from the /api/incidents payload.
+//
+// Run:  set -a && source .env.local && set +a && node scripts/seed-incidents.mjs
+import { neon } from "@neondatabase/serverless";
+import { randomBytes } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+
+const FILE = new URL("../incidents.json", import.meta.url);
+
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+function mintId(taken) {
+  for (;;) {
+    const id =
+      "ic_" +
+      Array.from(randomBytes(8), (b) => ALPHABET[b % ALPHABET.length]).join("");
+    if (!taken.has(id)) return id;
+  }
+}
+
+const data = JSON.parse(readFileSync(FILE, "utf8"));
+const taken = new Set(data.incidents.map((i) => i.id).filter(Boolean));
+let minted = 0;
+data.incidents = data.incidents.map((inc) => {
+  if (inc.id) return inc;
+  minted++;
+  const id = mintId(taken);
+  taken.add(id);
+  return { id, ...inc }; // id first, purely for readability of the JSON
+});
+if (minted > 0) writeFileSync(FILE, JSON.stringify(data, null, 2) + "\n");
+
+const sql = neon(process.env.DATABASE_URL);
+
+await sql`
+  CREATE TABLE IF NOT EXISTS incidents (
+    id         text     PRIMARY KEY,
+    num        smallint UNIQUE,
+    sev        smallint NOT NULL,
+    topology   text     NOT NULL,
+    vignette   text     NOT NULL,
+    clues      jsonb    NOT NULL,
+    answer_id  text     NOT NULL REFERENCES root_causes(id),
+    near_ids   jsonb    NOT NULL DEFAULT '[]',
+    postmortem text     NOT NULL
+  )`;
+
+for (const inc of data.incidents) {
+  await sql`
+    INSERT INTO incidents (id, num, sev, topology, vignette, clues, answer_id, near_ids, postmortem)
+    VALUES (${inc.id}, ${inc.num ?? null}, ${inc.sev}, ${inc.topology}, ${inc.vignette},
+            ${JSON.stringify(inc.clues)}::jsonb, ${inc.answerId},
+            ${JSON.stringify(inc.nearIds ?? [])}::jsonb, ${inc.postmortem})
+    ON CONFLICT (id) DO UPDATE SET
+      num = EXCLUDED.num, sev = EXCLUDED.sev, topology = EXCLUDED.topology,
+      vignette = EXCLUDED.vignette, clues = EXCLUDED.clues,
+      answer_id = EXCLUDED.answer_id, near_ids = EXCLUDED.near_ids,
+      postmortem = EXCLUDED.postmortem`;
+  const slot = inc.num != null ? `daily #${inc.num}` : `https://incidle.com/a/${inc.id}`;
+  console.log(`${inc.id}  ${inc.answerId.padEnd(28)} ${slot}`);
+}
+console.log(`\n${data.incidents.length} incidents upserted (${minted} new id${minted === 1 ? "" : "s"} minted).`);

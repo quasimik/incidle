@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { DAILY_EPOCH, toDateStr, dayNumber, addDays, fmtShort } from "./daily.js";
-import { useRoute, navigate } from "./router.jsx";
+import { useRoute, navigate, Link } from "./router.jsx";
 import Game from "./Game.jsx";
 import Archive from "./Archive.jsx";
 
@@ -53,7 +53,23 @@ function App({ answers, incidents }) {
   const today = toDateStr(new Date());
   const todayNum = Math.max(0, dayNumber(today));
 
-  if (route.view === "archive") return <Archive today={today} incidents={incidents} />;
+  if (route.view === "archive")
+    return <Archive today={today} dailyCount={incidents.length} />;
+  if (route.view === "custom") return <CustomGame answers={answers} id={route.id} />;
+
+  if (incidents.length === 0) {
+    if (route.view === "day") return <RedirectHome />;
+    return (
+      <div className="idle-root">
+        <div className="boot">
+          <span>no incident scheduled today.</span>
+          <Link className="btn btn-ghost" href="/archive">
+            archive
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const n = route.view === "day" ? route.num - 1 : todayNum;
   if (n >= 0 && n <= todayNum)
@@ -69,6 +85,66 @@ function App({ answers, incidents }) {
       />
     );
   return <RedirectHome />;
+}
+
+// A custom incident is never in the boot payload (see api/incidents.js), so
+// fetch it by id when its link is opened. A bad or deleted id lands on a
+// dead-end screen rather than a redirect, so the URL stays inspectable.
+function CustomGame({ answers, id }) {
+  const [incident, setIncident] = useState(null);
+  const [failed, setFailed] = useState(null); // "missing" | "network"
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIncident(null);
+    setFailed(null);
+    fetch(`/api/incident?id=${id}`)
+      .then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(r.status === 404 ? "missing" : "network"))
+      )
+      .then((d) => !cancelled && setIncident(d.incident))
+      .catch((e) => !cancelled && setFailed(e.message === "missing" ? "missing" : "network"));
+    return () => {
+      cancelled = true;
+    };
+  }, [id, attempt]);
+
+  if (!incident)
+    return (
+      <div className="idle-root">
+        <div className="boot">
+          {failed === "missing" ? (
+            <>
+              <span>no such incident.</span>
+              <Link className="btn btn-ghost" href="/">
+                today's incident
+              </Link>
+            </>
+          ) : failed ? (
+            <>
+              <span>couldn't reach the incident database.</span>
+              <button className="btn btn-ghost" onClick={() => setAttempt(attempt + 1)}>
+                retry
+              </button>
+            </>
+          ) : (
+            <span>connecting…</span>
+          )}
+        </div>
+      </div>
+    );
+  return (
+    <Game
+      key={id}
+      answers={answers}
+      incident={incident}
+      title={`INCIDLE ${id}`}
+      shareTag={`incidle ${id}`}
+      shareUrl={`https://incidle.com/a/${id}`}
+      storageKey={id}
+    />
+  );
 }
 
 function RedirectHome() {
