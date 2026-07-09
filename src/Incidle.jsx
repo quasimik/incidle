@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import uFuzzy from "@leeoniya/ufuzzy";
 
 // ---------------------------------------------------------------------------
-// CASES — the paging vignette and the system topology primer are free. Every action
+// INCIDENTS — the paging vignette and the system topology primer are free. Every action
 // after that — revealing an observation or testing a hypothesis (right or
 // wrong) — burns one hour of the HOURS budget. Unresolved at T+HOURS, the
 // incident escalates.
@@ -14,7 +14,7 @@ import uFuzzy from "@leeoniya/ufuzzy";
 // topology: what the responder would already know — relevant or apparently
 // relevant only, never exhaustive. It shapes the hypothesis space for free.
 // ---------------------------------------------------------------------------
-const CASES = [
+const INCIDENTS = [
   {
     num: 1,
     sev: 2,
@@ -219,7 +219,7 @@ export default function Incidle() {
 
 function Game({ answers }) {
   const { answerById, matchAnswers } = useMemo(() => buildMatcher(answers), [answers]);
-  const [caseIdx, setCaseIdx] = useState(0);
+  const [incidentIdx, setIncidentIdx] = useState(0);
   const [feed, setFeed] = useState(() => initialFeed(0));
   const [actions, setActions] = useState([]); // "obs" | "wrong" | "solve" — one per hour burned
   const [status, setStatus] = useState("active"); // active | solved | failed
@@ -238,7 +238,7 @@ function Game({ answers }) {
   const inputRef = useRef(null);
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
 
-  const c = CASES[caseIdx];
+  const c = INCIDENTS[incidentIdx];
   const maxClues = c.clues.length;
   const revealed = actions.filter((a) => a === "obs").length;
   const hoursUsed = actions.length;
@@ -246,8 +246,8 @@ function Game({ answers }) {
   const sel = Math.min(selIdx, Math.max(suggestions.length - 1, 0));
 
   function initialFeed(idx) {
-    const cs = CASES[idx];
-    return [{ type: "page", time: "T+0", text: cs.vignette }];
+    const inc = INCIDENTS[idx];
+    return [{ type: "page", time: "T+0", text: inc.vignette }];
   }
 
   useEffect(() => {
@@ -375,9 +375,9 @@ function Game({ answers }) {
     }
   }
 
-  function nextCase() {
-    const idx = (caseIdx + 1) % CASES.length;
-    setCaseIdx(idx);
+  function nextIncident() {
+    const idx = (incidentIdx + 1) % INCIDENTS.length;
+    setIncidentIdx(idx);
     setFeed(initialFeed(idx));
     setActions([]);
     setStatus("active");
@@ -392,7 +392,7 @@ function Game({ answers }) {
     const sq = { obs: "🟦", wrong: "🟥", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
     const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
-    return `💻 incidle ${caseIdx + 1}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
+    return `💻 incidle ${incidentIdx + 1}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
   }
 
   async function copyShare() {
@@ -472,7 +472,7 @@ function Game({ answers }) {
               <button className="btn btn-ghost" onClick={copyShare}>
                 {copied ? "copied ✓" : "copy result"}
               </button>
-              <button className="btn btn-primary" onClick={nextCase}>
+              <button className="btn btn-primary" onClick={nextIncident}>
                 next incident →
               </button>
             </div>
