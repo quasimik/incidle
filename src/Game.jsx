@@ -393,14 +393,6 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
-            {ans?.description && (
-              <div className="callout">
-                <span className="callout-icon">🎯</span>
-                <div className="callout-head">Root cause: {ans.name}</div>
-                <p className="callout-body">{rich(ans.description)}</p>
-              </div>
-            )}
-            {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
             {revealed < maxClues && (
               <details className="unseen">
                 <summary className="unseen-summary">
@@ -413,6 +405,14 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
                 </ul>
               </details>
             )}
+            {ans?.description && (
+              <div className="callout">
+                <span className="callout-icon">🎯</span>
+                <div className="callout-head">Root cause: {ans.name}</div>
+                <p className="callout-body">{rich(ans.description)}</p>
+              </div>
+            )}
+            {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
