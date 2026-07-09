@@ -2,7 +2,12 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import uFuzzy from "@leeoniya/ufuzzy";
 
 // ---------------------------------------------------------------------------
-// INCIDENTS — the paging vignette and the system topology primer are free. Every action
+// INCIDENTS — the daily pool. Wordle-style: day N since DAILY_EPOCH plays
+// INCIDENTS[N % length], so everyone gets the same incident on the same local
+// calendar day and the pool cycles when the calendar outruns it — add
+// incidents faster than the calendar eats them.
+//
+// The paging vignette and the system topology primer are free. Every action
 // after that — revealing an observation or testing a hypothesis (right or
 // wrong) — burns one hour of the HOURS budget. Unresolved at T+HOURS, the
 // incident escalates.
@@ -67,6 +72,71 @@ const INCIDENTS = [
       "With NTP dead on one pool, its clocks drifted until freshly-issued tokens appeared to come from the future and failed validation — sporadically, because only requests landing on pool C failed. Fix: restore time sync, alert on clock offset directly, and treat 'works on retry' as a load-balancer-shaped clue.",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// DAILY SCHEDULE — day #1 is DAILY_EPOCH; day numbers count local calendar
+// days from it. All date math runs at local noon so DST shifts can't move a
+// day boundary.
+// ---------------------------------------------------------------------------
+const DAILY_EPOCH = "2026-07-07";
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function localNoon(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d, 12);
+}
+function dayNumber(dateStr) {
+  return Math.round((localNoon(dateStr) - localNoon(DAILY_EPOCH)) / 864e5);
+}
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return toDateStr(new Date(y, m - 1, d + n, 12));
+}
+function fmtShort(dateStr) {
+  return localNoon(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// ---------------------------------------------------------------------------
+// SAVED RUNS — one localStorage entry per incident: { s: status, a: actions,
+// g: guessed ids in order }, keyed by the daily's date. Saved mid-game too,
+// so a reload or a trip to the archive resumes where you were — and a
+// finished daily stays finished, Wordle-style.
+// ---------------------------------------------------------------------------
+function loadRun(key) {
+  try {
+    return JSON.parse(localStorage.getItem(`incidle:run:${key}`));
+  } catch {
+    return null;
+  }
+}
+function saveRun(key, run) {
+  try {
+    localStorage.setItem(`incidle:run:${key}`, JSON.stringify(run));
+  } catch {}
+}
+
+// ---------------------------------------------------------------------------
+// ROUTES — hash-based so no server rewrites are needed:
+//   #/            today's daily
+//   #/day/<date>  a past daily (epoch..today)
+//   #/archive     past dailies
+// ---------------------------------------------------------------------------
+function parseHash(h) {
+  if (h === "#/archive") return { view: "archive" };
+  if (h.startsWith("#/day/")) return { view: "day", date: h.slice(6) };
+  return { view: "today" };
+}
+function useRoute() {
+  const [route, setRoute] = useState(() => parseHash(window.location.hash));
+  useEffect(() => {
+    const onHash = () => setRoute(parseHash(window.location.hash));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  return route;
+}
 
 // ---------------------------------------------------------------------------
 // ANSWER LIST — fixed taxonomy of root causes, fetched at runtime from
@@ -214,17 +284,127 @@ export default function Incidle() {
       </div>
     );
   }
-  return <Game answers={answers} />;
+  return <App answers={answers} />;
 }
 
-function Game({ answers }) {
+// Route → screen. Game is keyed by incident, so navigating between incidents
+// remounts it with fresh state (any in-progress run is in localStorage).
+function App({ answers }) {
+  const route = useRoute();
+  const today = toDateStr(new Date());
+  const todayNum = Math.max(0, dayNumber(today));
+
+  if (route.view === "archive") return <Archive today={today} />;
+
+  const date = route.view === "day" ? route.date : today;
+  const n =
+    route.view === "day" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? dayNumber(date) : todayNum;
+  if (n >= 0 && n <= todayNum)
+    return (
+      <Game
+        key={`d${date}`}
+        answers={answers}
+        incident={INCIDENTS[n % INCIDENTS.length]}
+        title={`INCIDLE #${n + 1}`}
+        sub={date === today ? null : fmtShort(date)}
+        shareTag={`incidle #${n + 1}`}
+        storageKey={date}
+      />
+    );
+  return <RedirectHome />;
+}
+
+function RedirectHome() {
+  useEffect(() => {
+    window.location.replace("#/");
+  }, []);
+  return null;
+}
+
+// Result marker for an archive row, from the saved run (if any).
+function runStatus(run) {
+  if (!run) return <span className="arch-status">play →</span>;
+  if (run.s === "solved") return <span className="arch-status arch-solved">✓ T+{run.a.length}</span>;
+  if (run.s === "failed") return <span className="arch-status arch-failed">escalated</span>;
+  return <span className="arch-status arch-progress">T+{run.a.length} · in progress</span>;
+}
+
+function Archive({ today }) {
+  const todayNum = Math.max(0, dayNumber(today));
+  const days = Array.from({ length: todayNum + 1 }, (_, i) => todayNum - i);
+  return (
+    <div className="idle-root">
+      <style>{CSS}</style>
+      <header className="hdr">
+        <div className="hdr-left">
+          <span className="brand">INCIDLE</span>
+          <span className="svc">archive</span>
+        </div>
+        <a className="hdr-link" href="#/">
+          today →
+        </a>
+      </header>
+      <main className="feed">
+        <ul className="arch-list">
+          {days.map((n) => {
+            const date = addDays(DAILY_EPOCH, n);
+            const inc = INCIDENTS[n % INCIDENTS.length];
+            return (
+              <li key={date}>
+                <a className="arch-row" href={n === todayNum ? "#/" : `#/day/${date}`}>
+                  <span className="arch-id">#{n + 1}</span>
+                  <span className="arch-date">{n === todayNum ? "today" : fmtShort(date)}</span>
+                  <span className={`sev sev-${inc.sev}`}>SEV{inc.sev}</span>
+                  <span className="arch-vig">{inc.vignette.replace(/^PAGE — /, "")}</span>
+                  {runStatus(loadRun(date))}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </main>
+    </div>
+  );
+}
+
+// Rebuild a feed from a saved run — the inverse of handleInvestigate /
+// handleGuess. "obs" consumes the next clue, "wrong" the next saved guess id.
+function rebuildFeed(inc, run, answerById) {
+  const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
+  let clue = 0;
+  let gi = 0;
+  run.a.forEach((act, i) => {
+    const time = `T+${i + 1}`;
+    if (act === "obs") {
+      feed.push({ type: "clue", time, text: inc.clues[clue++] });
+    } else if (act === "solve") {
+      feed.push({ type: "resolve", time, text: answerById[inc.answerId]?.name ?? "" });
+    } else {
+      const id = run.g[gi++];
+      const name = answerById[id]?.name ?? id;
+      feed.push(
+        inc.nearIds?.includes(id)
+          ? { type: "near", time, text: `${name} — directionally right, but not the best answer.` }
+          : { type: "reject", time, text: name }
+      );
+    }
+  });
+  if (run.s === "failed")
+    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${answerById[inc.answerId]?.name}.` });
+  return feed;
+}
+
+function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, storageKey }) {
   const { answerById, matchAnswers } = useMemo(() => buildMatcher(answers), [answers]);
-  const [incidentIdx, setIncidentIdx] = useState(0);
-  const [feed, setFeed] = useState(() => initialFeed(0));
-  const [actions, setActions] = useState([]); // "obs" | "wrong" | "solve" — one per hour burned
-  const [status, setStatus] = useState("active"); // active | solved | failed
+  // resume this incident's saved run — finished or mid-game — if one exists
+  const [saved] = useState(() => loadRun(storageKey));
+  const [feed, setFeed] = useState(() =>
+    saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
+  );
+  const [actions, setActions] = useState(saved?.a ?? []); // "obs" | "wrong" | "solve" — one per hour burned
+  const [status, setStatus] = useState(saved?.s ?? "active"); // active | solved | failed
   const [query, setQuery] = useState("");
-  const [guessedIds, setGuessedIds] = useState([]);
+  const [guessedIds, setGuessedIds] = useState(saved?.g ?? []);
   const [selIdx, setSelIdx] = useState(0); // highlighted suggestion
   const [inputFocused, setInputFocused] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -234,21 +414,23 @@ function Game({ answers }) {
     try { return !localStorage.getItem("incidle:intro-seen"); }
     catch { return true; }
   });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
 
-  const c = INCIDENTS[incidentIdx];
   const maxClues = c.clues.length;
   const revealed = actions.filter((a) => a === "obs").length;
   const hoursUsed = actions.length;
   const { items: suggestions, more } = useMemo(() => matchAnswers(query), [query, matchAnswers]);
   const sel = Math.min(selIdx, Math.max(suggestions.length - 1, 0));
 
-  function initialFeed(idx) {
-    const inc = INCIDENTS[idx];
-    return [{ type: "page", time: "T+0", text: inc.vignette }];
-  }
+  // persist the run after every hour-costing action (and on finish)
+  useEffect(() => {
+    if (actions.length === 0) return;
+    saveRun(storageKey, { s: status, a: actions, g: guessedIds });
+  }, [storageKey, status, actions, guessedIds]);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });
@@ -257,6 +439,21 @@ function Game({ answers }) {
   function focusInput() {
     if (CAN_HOVER) inputRef.current?.focus();
   }
+
+  // header menu: close on any outside press or Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPress = (e) => {
+      if (!menuRef.current?.contains(e.target)) setMenuOpen(false);
+    };
+    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("pointerdown", onPress);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPress);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   function dismissHelp() {
     setShowHelp(false);
@@ -375,24 +572,11 @@ function Game({ answers }) {
     }
   }
 
-  function nextIncident() {
-    const idx = (incidentIdx + 1) % INCIDENTS.length;
-    setIncidentIdx(idx);
-    setFeed(initialFeed(idx));
-    setActions([]);
-    setStatus("active");
-    setQuery("");
-    setGuessedIds([]);
-    setSelIdx(0);
-    setCopied(false);
-    setTimeout(focusInput, 50);
-  }
-
   function shareText() {
     const sq = { obs: "🟦", wrong: "🟥", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
     const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
-    return `💻 incidle ${incidentIdx + 1}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
+    return `💻 ${shareTag}\n${verdict}\n${squares}\n\nhttps://incidle.com`;
   }
 
   async function copyShare() {
@@ -416,7 +600,26 @@ function Game({ answers }) {
 
       <header className="hdr">
         <div className="hdr-left">
-          <span className="brand">INCIDLE {c.num}</span>
+          <div className="menu-wrap" ref={menuRef}>
+            <button
+              className="menu-btn"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label="Menu"
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+            >
+              ☰
+            </button>
+            {menuOpen && (
+              <nav className="menu">
+                <a className="menu-item" href="#/archive" onClick={() => setMenuOpen(false)}>
+                  archive
+                </a>
+              </nav>
+            )}
+          </div>
+          <span className="brand">{title}</span>
+          {sub && <span className="svc">{sub}</span>}
           <span className={`sev sev-${c.sev}`}>SEV{c.sev}</span>
           <button
             className="help-btn"
@@ -472,9 +675,9 @@ function Game({ answers }) {
               <button className="btn btn-ghost" onClick={copyShare}>
                 {copied ? "copied ✓" : "copy result"}
               </button>
-              <button className="btn btn-primary" onClick={nextIncident}>
-                next incident →
-              </button>
+              <a className="btn btn-primary" href="#/archive">
+                more incidents →
+              </a>
             </div>
             <pre className="share-preview">{shareText()}</pre>
           </div>
@@ -637,7 +840,9 @@ const CSS = `
   padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
   flex-wrap: wrap;
 }
-.hdr-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* min-height = the game header's tallest content (21px help button), so
+   headers without that button (archive) still render the same bar height */
+.hdr-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 21px; }
 .brand { font-weight: 600; letter-spacing: 0.18em; font-size: 14px; }
 .help-btn {
   width: 21px; height: 21px; padding: 0; border-radius: 50%;
@@ -878,6 +1083,54 @@ const CSS = `
 .btn-primary { background: rgba(87,217,147,.14); border-color: rgba(87,217,147,.4); color: var(--green); }
 .btn-primary:hover { background: rgba(87,217,147,.22); }
 .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
+.idle-root a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.menu-wrap { position: relative; display: flex; }
+.menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 3px; margin: -3px; /* generous hit area without eating header space */
+  background: none; border: 0;
+  color: var(--muted); font-size: 18px; line-height: 1;
+}
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { color: var(--cyan); }
+.menu {
+  position: absolute; top: calc(100% + 10px); left: -6px; z-index: 40;
+  min-width: 160px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  animation: fade .15s ease-out;
+}
+.menu-item {
+  display: block; padding: 9px 11px; border-radius: 6px;
+  color: var(--text); text-decoration: none; font-size: 13.5px;
+}
+.menu-item:hover { background: rgba(107,213,232,.1); color: var(--cyan); }
+/* plain text link — a boxed button can't fit 12.5px text comfortably inside
+   the 21px the game header allows, so skip the box entirely */
+.hdr-link { color: var(--muted); text-decoration: none; font-size: 12.5px; }
+.hdr-link:hover { color: var(--cyan); }
+
+/* archive — one row per incident: id, date, severity, vignette teaser, result */
+.arch-list {
+  list-style: none; margin: 0 0 22px; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.arch-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 6px;
+  background: var(--panel); border: 1px solid var(--line);
+  color: var(--text); text-decoration: none; font-size: 13.5px;
+}
+.arch-row:hover { border-color: var(--cyan); }
+.arch-id { font-weight: 600; white-space: nowrap; min-width: 30px; }
+.arch-date { color: var(--muted); font-size: 12.5px; white-space: nowrap; min-width: 46px; }
+.arch-vig {
+  flex: 1; min-width: 0; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.arch-status { white-space: nowrap; font-size: 12px; color: var(--muted); }
+.arch-solved { color: var(--green); }
+.arch-failed { color: var(--red); }
+.arch-progress { color: var(--amber); }
 
 @media (max-width: 560px) {
   .entry { grid-template-columns: 42px 1fr; }
@@ -915,6 +1168,9 @@ const CSS = `
   .opt-main .alias-hit, .opt-main .tag-hit {
     flex-shrink: 1; overflow: hidden; text-overflow: ellipsis;
   }
+  /* archive rows: teaser drops to its own full-width line */
+  .arch-row { flex-wrap: wrap; row-gap: 5px; padding: 9px 10px; }
+  .arch-vig { flex: 1 1 100%; }
 }
 
 /* Touch devices: keyboard hints (enter / esc / number keys) are dead weight. */
