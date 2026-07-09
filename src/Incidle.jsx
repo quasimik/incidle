@@ -909,6 +909,13 @@ const CSS = `
   .action-btn { flex: 1; min-width: 0; }
   .combo-input { font-size: 16px; } /* <16px triggers iOS focus-zoom */
   .combo-list { max-height: min(300px, 38dvh); } /* stay clear of the keyboard */
+  /* one-line suggestion rows: the alias/tag hit gives way (ellipsis) before
+     anything wraps; the name and the rejected-note hold their ground */
+  .opt-main { min-width: 0; overflow: hidden; white-space: nowrap; }
+  .opt-main > span { flex-shrink: 0; }
+  .opt-main .alias-hit, .opt-main .tag-hit {
+    flex-shrink: 1; overflow: hidden; text-overflow: ellipsis;
+  }
 }
 
 /* Touch devices: keyboard hints (enter / esc / number keys) are dead weight. */
