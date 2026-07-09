@@ -2,22 +2,22 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import uFuzzy from "@leeoniya/ufuzzy";
 
 // ---------------------------------------------------------------------------
-// CASES — the paging vignette and the stack primer are free. Every action
+// CASES — the paging vignette and the system topology primer are free. Every action
 // after that — revealing an observation or testing a hypothesis (right or
 // wrong) — burns one hour of the HOURS budget. Unresolved at T+HOURS, the
 // incident escalates.
 // Clue order mirrors real triage: symptom → metrics → changes → smoking gun.
 // nearIds get a "directionally right" response but still cost the hour.
-// stack: what the responder would already know — relevant or apparently
+// topology: what the responder would already know — relevant or apparently
 // relevant only, never exhaustive. It shapes the hypothesis space for free.
 // ---------------------------------------------------------------------------
 const CASES = [
   {
-    service: "checkout-api",
+    num: 1,
     sev: 2,
-    vignette: "PAGE — checkout error rate at 4% and climbing. Users seeing 503s at payment step.",
-    stack:
+    topology:
       "`checkout-api` fronts the purchase flow and calls `payments-svc` for card auth against a third-party processor. Several backend services share one Postgres primary (`max_connections` 500). Sessions live in Redis. Teams deploy independently, many times a day.",
+    vignette: "PAGE — checkout error rate at 4% and climbing. Users seeing 503s at payment step.",
     clues: [
       "All failures are 503s originating from `payments-svc`. Every other endpoint is healthy.",
       "`payments-svc` looks fine: CPU and memory normal, zero restarts, latency on successful requests unchanged.",
@@ -30,11 +30,11 @@ const CASES = [
       "`promo-svc` and `payments-svc` share a database. The new coupon path leaked connections (opened transactions, never closed), pinning the pool at max and starving `payments-svc` — which failed while looking perfectly healthy itself. Fix: roll back, add an idle-in-transaction timeout, and give each service its own pool with a hard cap.",
   },
   {
-    service: "product-page",
+    num: 2,
     sev: 3,
-    vignette: "PAGE — database CPU alarms firing in bursts. Product pages crawl for ~30s, recover, then it happens again.",
-    stack:
+    topology:
       "`product-page` renders server-side off a Postgres read pool. Expensive aggregations are cached look-aside in Redis with TTLs. A CDN caches full pages for anonymous traffic, and assorted cron jobs run housekeeping on fixed schedules.",
+    vignette: "PAGE — database CPU alarms firing in bursts. Product pages crawl for ~30s, recover, then it happens again.",
     clues: [
       "The spikes land exactly on a 15-minute grid: :00, :15, :30, :45.",
       "During each spike the DB runs the same expensive query hundreds of times concurrently — the top-sellers aggregation.",
@@ -47,11 +47,11 @@ const CASES = [
       "Classic stampede: a popular cache key expires on a fixed TTL, and every concurrent request recomputes the expensive value simultaneously, hammering the database until one write repopulates the key. Fix: TTL jitter, a recompute lock or single-flight, or serve-stale-while-revalidate.",
   },
   {
-    service: "auth",
+    num: 3,
     sev: 3,
-    vignette: "PAGE — 0.7% of API calls failing with 401 invalid token. The same user's token works fine on retry.",
-    stack:
+    topology:
       "auth issues short-lived signed tokens (JWT, 15-minute expiry) that services verify locally against weekly-rotated keys. Verification runs on three pools of long-lived VMs behind a round-robin balancer. A security-hardening pass tightened baseline host configs recently.",
+    vignette: "PAGE — 0.7% of API calls failing with 401 invalid token. The same user's token works fine on retry.",
     clues: [
       "Every failure was verified on host pool C. Pools A and B have zero.",
       "Rejection reason in logs: 'token used before issued' — the token's `iat` timestamp is in the future.",
@@ -401,8 +401,6 @@ function Game({ answers }) {
     }
   }
 
-  const errRate =
-    status === "solved" ? 0.2 : status === "failed" ? 34.8 : 2.4 + hoursUsed * 1.9;
   const done = status !== "active";
   // one action button: investigate on empty field, guess otherwise
   const investigateMode = !staged && query.trim() === "";
@@ -414,10 +412,8 @@ function Game({ answers }) {
 
       <header className="hdr">
         <div className="hdr-left">
-          <span className="brand">INCIDLE</span>
-          <span className="case-num">
-            incident {caseIdx + 1}/{CASES.length}
-          </span>
+          <span className="brand">INCIDLE {c.num}</span>
+          <span className={`sev sev-${c.sev}`}>SEV{c.sev}</span>
           <button
             className="help-btn"
             onClick={() => setShowHelp(true)}
@@ -426,13 +422,6 @@ function Game({ answers }) {
           >
             ?
           </button>
-        </div>
-        <div className="hdr-right">
-          <span className={`sev sev-${c.sev}`}>SEV{c.sev}</span>
-          <span className="svc">{c.service}</span>
-          <span className={`err ${status === "solved" ? "err-ok" : ""}`}>
-            err {errRate.toFixed(1)}%{status === "active" ? " ▲" : status === "solved" ? " ▼" : " ▲"}
-          </span>
         </div>
       </header>
 
@@ -451,8 +440,8 @@ function Game({ answers }) {
 
       <main className="feed" aria-live="polite">
         <div className="post post-sys">
-          <div className="post-head">SYSTEM | {c.service}</div>
-          <p className="post-body">{rich(c.stack)}</p>
+          <div className="post-head">SYSTEM TOPOLOGY</div>
+          <p className="post-body">{rich(c.topology)}</p>
         </div>
 
         {feed.map((e, i) => (
@@ -637,9 +626,8 @@ const CSS = `
   padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
   flex-wrap: wrap;
 }
-.hdr-left, .hdr-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hdr-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .brand { font-weight: 600; letter-spacing: 0.18em; font-size: 14px; }
-.case-num { color: var(--muted); font-size: 12.5px; }
 .help-btn {
   width: 21px; height: 21px; padding: 0; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
@@ -655,8 +643,6 @@ const CSS = `
 .sev-1 { background: rgba(255,107,107,.18); color: var(--red); border: 1px solid rgba(255,107,107,.45); }
 .sev-2 { background: rgba(255,196,107,.15); color: var(--amber); border: 1px solid rgba(255,196,107,.4); }
 .sev-3 { background: rgba(107,213,232,.12); color: var(--cyan); border: 1px solid rgba(107,213,232,.35); }
-.err { font-size: 12.5px; color: var(--red); }
-.err-ok { color: var(--green); }
 
 .budget {
   display: flex; align-items: center; gap: 6px; padding: 10px 16px;
