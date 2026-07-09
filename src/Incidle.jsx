@@ -250,6 +250,8 @@ function Game({ answers }) {
   function dismissHelp() {
     setShowHelp(false);
     try { localStorage.setItem("incidle:intro-seen", "1"); } catch {}
+    // hand focus back to the search input the modal was covering
+    setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   useEffect(() => {
@@ -258,6 +260,25 @@ function Game({ answers }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showHelp]);
+
+  // Enter re-captures the search input when focus has drifted to a
+  // non-interactive element (e.g. after clicking blank feed space). Real
+  // controls keep their own Enter behavior; the input handles its own when
+  // already focused.
+  useEffect(() => {
+    if (status !== "active" || showHelp) return;
+    const onKey = (e) => {
+      if (e.key !== "Enter") return;
+      const el = inputRef.current;
+      if (!el || document.activeElement === el) return;
+      const active = document.activeElement;
+      if (active && /^(INPUT|BUTTON|TEXTAREA|SELECT|A)$/.test(active.tagName)) return;
+      e.preventDefault();
+      el.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [status, showHelp]);
 
   function eventTime(n) {
     return `T+${n}`;
@@ -281,6 +302,7 @@ function Game({ answers }) {
     const newActions = [...actions, "obs"];
     setActions(newActions);
     settle([...feed, { type: "clue", time: eventTime(newActions.length), text: c.clues[revealed] }], newActions);
+    inputRef.current?.focus(); // a button click shouldn't strand focus off the input
   }
 
 
@@ -475,7 +497,9 @@ function Game({ answers }) {
             <div className="combo">
               <input
                 ref={inputRef}
-                className={`combo-input ${staged ? "combo-input-staged" : ""}`}
+                className={`combo-input ${staged ? "combo-input-staged" : ""} ${
+                  !inputFocused ? "combo-input-blurred" : query ? "combo-input-clearable" : ""
+                }`}
                 value={query}
                 placeholder="guess root cause… (type to search)"
                 onChange={(e) => {
@@ -489,6 +513,13 @@ function Game({ answers }) {
                 aria-label="guess root cause"
                 autoFocus
               />
+              {!inputFocused ? (
+                <kbd className="key combo-focus-hint" aria-hidden="true">↵</kbd>
+              ) : query ? (
+                <span className="combo-clear-hint" aria-hidden="true">
+                  <kbd className="key">esc</kbd> clear
+                </span>
+              ) : null}
               {!staged && suggestions.length > 0 && (
                 <ul className="combo-list" role="listbox">
                   {suggestions.map((sug, i) => {
@@ -792,6 +823,15 @@ const CSS = `
 }
 .combo-input::placeholder { color: var(--muted); }
 .combo-input-staged { border-color: rgba(87,217,147,.6); }
+.combo-input-blurred { padding-right: 38px; } /* room for the ↵ refocus hint */
+.combo-input-clearable { padding-right: 82px; } /* room for the "esc clear" hint */
+.combo-focus-hint, .combo-clear-hint {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  pointer-events: none; color: var(--muted);
+}
+.combo-clear-hint {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+}
 .combo-list {
   position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
   list-style: none; margin: 0; padding: 4px;
