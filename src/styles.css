@@ -111,6 +111,21 @@ a.brand:hover { color: var(--cyan); }
   margin: 0; line-height: 1.55; font-size: 14px;
   font-family: 'Inter', system-ui, sans-serif; color: var(--text);
 }
+/* observations left on the table when the run ended — collapsed by default
+   so the reveal is opt-in, styled like ghosts of feed clue entries */
+.unseen { margin: 0 0 14px; }
+.unseen-summary {
+  cursor: pointer; user-select: none;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.unseen-summary:hover { color: var(--cyan); }
+.unseen-list { margin: 10px 0 0; padding: 0; list-style: none; }
+.unseen-list li {
+  padding: 9px 12px; border-radius: 6px; margin-bottom: 6px;
+  line-height: 1.55; color: var(--muted);
+  background: rgba(107,213,232,.04); border: 1px dashed rgba(107,213,232,.2);
+}
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 

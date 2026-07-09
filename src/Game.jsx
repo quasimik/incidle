@@ -401,6 +401,18 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
               </div>
             )}
             {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
+            {revealed < maxClues && (
+              <details className="unseen">
+                <summary className="unseen-summary">
+                  {maxClues - revealed} unrevealed observation{maxClues - revealed === 1 ? "" : "s"}
+                </summary>
+                <ul className="unseen-list">
+                  {c.clues.slice(revealed).map((cl, i) => (
+                    <li key={i}>{rich(cl)}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
