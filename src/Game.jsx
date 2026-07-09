@@ -1,10 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
 import { loadRun, saveRun } from "./runs.js";
 import { Link } from "./router.jsx";
 import { highlight, rich } from "./text.jsx";
-
-export const HOURS = 7; // time budget per incident; one action = one hour
 
 // Touch devices get no auto-focus or programmatic refocus of the search input:
 // popping the on-screen keyboard uninvited costs half the viewport.
@@ -20,10 +19,27 @@ const TAG = {
   escalate: { label: "ESCALATED", cls: "tag-escalate" },
 };
 
+// Server-side verdict: the incident payload carries nothing answer-derived,
+// so every guess is graded by POST /api/guess (guessId null just fetches the
+// reveal — see that file).
+async function postGuess(body) {
+  const r = await fetch("/api/guess", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
-// handleGuess. "obs" consumes the next clue, "wrong" the next saved guess id.
+// handleGuess. "obs" consumes the next clue, "near"/"wrong" the next saved
+// guess id; the resolve/escalate lines name the answer from the run's stored
+// reveal. Runs from before verdicts moved server-side save near guesses as
+// "wrong" (renders as a plain reject) and no reveal (backfilled on load).
 function rebuildFeed(inc, run, answerById) {
   const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
+  const revealName = answerById[run.r?.answerId]?.name ?? "…";
   let clue = 0;
   let gi = 0;
   run.a.forEach((act, i) => {
@@ -31,19 +47,19 @@ function rebuildFeed(inc, run, answerById) {
     if (act === "obs") {
       feed.push({ type: "clue", time, text: inc.clues[clue++] });
     } else if (act === "solve") {
-      feed.push({ type: "resolve", time, text: answerById[inc.answerId]?.name ?? "" });
+      feed.push({ type: "resolve", time, text: revealName });
     } else {
       const id = run.g[gi++];
       const name = answerById[id]?.name ?? id;
       feed.push(
-        inc.nearIds?.includes(id)
+        act === "near"
           ? { type: "near", time, text: `${name} — directionally right, but not the best answer.` }
           : { type: "reject", time, text: name }
       );
     }
   });
   if (run.s === "failed")
-    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${answerById[inc.answerId]?.name}.` });
+    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${revealName}.` });
   return feed;
 }
 
@@ -52,16 +68,20 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
+  // { answerId, postmortem } — arrives from /api/guess when the run ends
+  const [reveal, setReveal] = useState(() => saved?.r ?? null);
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
   );
-  const [actions, setActions] = useState(saved?.a ?? []); // "obs" | "wrong" | "solve" — one per hour burned
+  const [actions, setActions] = useState(saved?.a ?? []); // "obs" | "wrong" | "near" | "solve" — one per hour burned
   const [status, setStatus] = useState(saved?.s ?? "active"); // active | solved | failed
   const [query, setQuery] = useState("");
   const [guessedIds, setGuessedIds] = useState(saved?.g ?? []);
   const [selIdx, setSelIdx] = useState(0); // highlighted suggestion
   const [inputFocused, setInputFocused] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false); // a verdict request is in flight
+  const [netFail, setNetFail] = useState(false);
   // Show the how-to-play once, then remember it was seen. Guarded so a blocked
   // localStorage (private mode) just falls back to showing the intro.
   const [showHelp, setShowHelp] = useState(() => {
@@ -83,8 +103,33 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
   // persist the run after every hour-costing action (and on finish)
   useEffect(() => {
     if (actions.length === 0) return;
-    saveRun(storageKey, { s: status, a: actions, g: guessedIds, t: startedAt });
-  }, [storageKey, status, actions, guessedIds, startedAt]);
+    saveRun(storageKey, {
+      s: status,
+      a: actions,
+      g: guessedIds,
+      t: startedAt,
+      ...(reveal && { r: reveal }),
+    });
+  }, [storageKey, status, actions, guessedIds, startedAt, reveal]);
+
+  // Runs finished before verdicts moved server-side carry no reveal; fetch it
+  // once so the resolve/escalate lines and the postmortem can render (the
+  // save effect above then persists it, healing the stored run).
+  useEffect(() => {
+    if (!saved || saved.r || saved.s === "active") return;
+    let cancelled = false;
+    postGuess({ key: storageKey, hour: HOURS })
+      .then((r) => {
+        if (cancelled) return;
+        const rev = { answerId: r.answerId, postmortem: r.postmortem };
+        setReveal(rev);
+        setFeed(rebuildFeed(c, { ...saved, r: rev }, answerById));
+      })
+      .catch(() => {}); // the postmortem panel degrades gracefully without it
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });
@@ -146,50 +191,72 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
     return `T+${n}`;
   }
 
-  // Commit an hour-costing action; escalate if it was the budget's last hour.
-  function settle(newFeed, newActions) {
-    if (newActions.length >= HOURS) {
-      setFeed([
-        ...newFeed,
-        { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[c.answerId].name}.` },
-      ]);
-      setStatus("failed");
+  // Commit the reveal that ends a failed run — the budget's last hour.
+  function finishEscalate(newFeed, rev) {
+    setReveal(rev);
+    setFeed([
+      ...newFeed,
+      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerId]?.name}.` },
+    ]);
+    setStatus("failed");
+  }
+
+  async function handleInvestigate() {
+    if (busy || status !== "active" || revealed >= maxClues) return;
+    const hour = actions.length + 1;
+    const entry = { type: "clue", time: eventTime(hour), text: c.clues[revealed] };
+    if (hour < HOURS) {
+      setActions([...actions, "obs"]);
+      setFeed([...feed, entry]);
+      focusInput(); // a button click shouldn't strand focus off the input
       return;
     }
-    setFeed(newFeed);
+    // the last hour: clues are local, but the escalation reveal is not
+    setNetFail(false);
+    setBusy(true);
+    try {
+      const r = await postGuess({ key: storageKey, hour });
+      setActions([...actions, "obs"]);
+      finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+    } catch {
+      setNetFail(true); // the hour isn't burned; the button retries
+    }
+    setBusy(false);
+    focusInput();
   }
 
-  function handleInvestigate() {
-    if (status !== "active" || revealed >= maxClues) return;
-    const newActions = [...actions, "obs"];
-    setActions(newActions);
-    settle([...feed, { type: "clue", time: eventTime(newActions.length), text: c.clues[revealed] }], newActions);
-    focusInput(); // a button click shouldn't strand focus off the input
-  }
-
-  function handleGuess(ans) {
-    if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
+  async function handleGuess(ans) {
+    if (busy || status !== "active" || !ans || guessedIds.includes(ans.id)) return;
+    const hour = actions.length + 1;
+    setNetFail(false);
+    setBusy(true);
+    let r;
+    try {
+      r = await postGuess({ key: storageKey, guessId: ans.id, hour });
+    } catch {
+      setNetFail(true);
+      setBusy(false);
+      return; // the hour isn't burned; the typed query survives for a retry
+    }
+    setBusy(false);
     lastGuessAt.current = Date.now();
     setQuery("");
     setSelIdx(0);
-    const hit = ans.id === c.answerId;
-    const newActions = [...actions, hit ? "solve" : "wrong"];
-    const t = eventTime(newActions.length);
-    setActions(newActions);
-    if (hit) {
-      setFeed([
-        ...feed,
-        { type: "resolve", time: t, text: `${ans.name}` },
-      ]);
+    const t = eventTime(hour);
+    setActions([...actions, r.verdict]);
+    if (r.verdict === "solve") {
+      setReveal({ answerId: r.answerId, postmortem: r.postmortem });
+      setFeed([...feed, { type: "resolve", time: t, text: `${ans.name}` }]);
       setStatus("solved");
       return;
     }
-    const near = c.nearIds?.includes(ans.id);
-    const entry = near
-      ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
-      : { type: "reject", time: t, text: `${ans.name}` };
+    const entry =
+      r.verdict === "near"
+        ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
+        : { type: "reject", time: t, text: `${ans.name}` };
     setGuessedIds([...guessedIds, ans.id]);
-    settle([...feed, entry], newActions);
+    if (hour >= HOURS) finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+    else setFeed([...feed, entry]);
   }
 
   // One-step guess: picking a suggestion (click / enter / action button)
@@ -226,7 +293,7 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
   }
 
   function shareText() {
-    const sq = { obs: "🟦", wrong: "🟥", solve: "🟩" };
+    const sq = { obs: "🟦", wrong: "🟥", near: "🟥", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
     const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
     // customs are reachable only by their link, so the share must carry it;
@@ -322,18 +389,18 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
         ))}
 
         {done && (() => {
-          const ans = answerById[c.answerId];
+          const ans = answerById[reveal?.answerId];
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
-            {ans.description && (
+            {ans?.description && (
               <div className="callout">
                 <span className="callout-icon">🎯</span>
                 <div className="callout-head">Root cause: {ans.name}</div>
                 <p className="callout-body">{rich(ans.description)}</p>
               </div>
             )}
-            <p className="post-body">{rich(c.postmortem)}</p>
+            {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -360,6 +427,11 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
 
       {!done && (
         <footer className="dock">
+          {netFail && (
+            <div className="dock-err" role="alert">
+              couldn't reach the incident database — that move wasn't counted. try again.
+            </div>
+          )}
           <div className="dock-row">
             <div className="combo">
               <input
@@ -424,9 +496,10 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
               className={`btn action-btn ${investigateMode ? "btn-secondary" : "btn-primary"} ${enterInvestigates ? "btn-armed" : ""}`}
               onClick={() => (investigateMode ? handleInvestigate() : suggestions.length > 0 && pick(suggestions[sel].a))}
               disabled={
-                investigateMode
+                busy ||
+                (investigateMode
                   ? revealed >= maxClues
-                  : suggestions.length === 0 || guessedIds.includes(suggestions[sel].a.id)
+                  : suggestions.length === 0 || guessedIds.includes(suggestions[sel].a.id))
               }
             >
               {investigateMode ? "investigate" : "root-cause"}

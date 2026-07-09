@@ -13,6 +13,11 @@ import { neon } from "@neondatabase/serverless";
 // never ride along here — this payload goes to every visitor at boot, and
 // shipping them would let anyone enumerate every secret incident.
 //
+// Answer-derived fields (answer_id, near_ids, postmortem) deliberately don't
+// ship either: the client grades guesses through POST /api/guess, which
+// reveals the postmortem only once a run ends. Keep them out of every
+// row-shaped payload.
+//
 // The paging vignette and the system topology primer are free. Every action
 // after that — revealing an observation or testing a hypothesis (right or
 // wrong) — burns one hour of the HOURS budget. Unresolved at T+HOURS, the
@@ -28,8 +33,7 @@ import { neon } from "@neondatabase/serverless";
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   const rows = await sql`
-    SELECT num, sev, topology, vignette, clues,
-           answer_id AS "answerId", near_ids AS "nearIds", postmortem
+    SELECT num, sev, topology, vignette, clues
     FROM incidents
     WHERE num IS NOT NULL
     ORDER BY num`;

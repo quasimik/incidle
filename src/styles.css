@@ -31,7 +31,7 @@ a.brand:hover { color: var(--cyan); }
 .budget { display: flex; align-items: center; gap: 6px; }
 .pip { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
 .pip-obs { background: var(--cyan); }
-.pip-wrong { background: var(--red); }
+.pip-wrong, .pip-near { background: var(--red); } /* near still burned the hour */
 .pip-solve { background: var(--green); }
 .budget-label { margin-left: 8px; color: var(--muted); font-size: 12.5px; }
 
@@ -171,6 +171,7 @@ a.brand:hover { color: var(--cyan); }
   position: relative;
 }
 .dock-row { display: flex; gap: 10px; align-items: flex-start; }
+.dock-err { color: var(--red); font-size: 12.5px; }
 .cost-tag {
   font-size: 11px;
   font-weight: 600; letter-spacing: .08em; color: var(--amber);
