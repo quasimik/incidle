@@ -415,9 +415,18 @@ function Game({ answers }) {
           </div>
         ))}
 
-        {done && (
+        {done && (() => {
+          const ans = answerById[c.answerId];
+          return (
           <div className="post">
-            <div className="post-head">POSTMORTEM | {answerById[c.answerId].name}</div>
+            <div className="post-head">POSTMORTEM</div>
+            {ans.description && (
+              <div className="callout">
+                <span className="callout-icon">🎯</span>
+                <div className="callout-head">Root cause: {ans.name}</div>
+                <p className="callout-body">{rich(ans.description)}</p>
+              </div>
+            )}
             <p className="post-body">{rich(c.postmortem)}</p>
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
@@ -429,7 +438,8 @@ function Game({ answers }) {
             </div>
             <pre className="share-preview">{shareText()}</pre>
           </div>
-        )}
+          );
+        })()}
         <div ref={feedEndRef} />
       </main>
 
@@ -609,6 +619,25 @@ const CSS = `
 }
 .post-sys { margin: 0 0 6px; }
 .post-sys .post-body { margin: 0; color: var(--muted); }
+.callout {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 11px; row-gap: 7px;
+  margin: 16px 0px; padding: 13px 15px; border-radius: 6px;
+  background: var(--bg); border: 1px solid rgba(107,213,232,.28);
+  border-left: 3px solid var(--cyan);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.35);
+}
+.callout-icon { grid-row: 1; align-self: center; font-size: 19px; line-height: 1; }
+.callout-head {
+  grid-column: 2; align-self: center;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--cyan);
+}
+.callout-body {
+  grid-column: 2;
+  margin: 0; line-height: 1.55; font-size: 14px;
+  font-family: 'Inter', system-ui, sans-serif; color: var(--text);
+}
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .share-preview {
   margin: 14px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--bg);
