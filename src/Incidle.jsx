@@ -479,12 +479,12 @@ const CSS = `
   font-size: 11px; font-weight: 600;
   letter-spacing: .08em; padding: 2px 6px; border-radius: 4px; text-align: center; white-space: nowrap;
 }
-.tag-page { background: rgba(255,107,107,.16); color: var(--red); }
-.tag-clue { background: rgba(107,213,232,.12); color: var(--cyan); }
-.tag-reject { background: rgba(124,138,160,.14); color: var(--muted); }
+.tag-page { background: rgba(255,196,107,.15); color: var(--amber); }
+.tag-clue { background: rgba(107,213,232,.15); color: var(--cyan); }
+.tag-reject { background: rgba(255,107,107,.09); color: rgba(255,107,107,.7); }
 .tag-near { background: rgba(255,196,107,.15); color: var(--amber); }
-.tag-resolve { background: rgba(87,217,147,.16); color: var(--green); }
-.tag-escalate { background: rgba(255,107,107,.16); color: var(--red); }
+.tag-resolve { background: rgba(87,217,147,.15); color: var(--green); }
+.tag-escalate { background: rgba(255,107,107,.15); color: var(--red); }
 .text { line-height: 1.55; }
 .text code, .post-body code {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -492,10 +492,12 @@ const CSS = `
   padding: 1px 4px; border-radius: 4px;
 }
 .post-body code { font-size: .9em; }
-.entry-page { background: rgba(255,107,107,.06); border: 1px solid rgba(255,107,107,.18); }
+.entry-page { background: rgba(255,196,107,.05); border: 1px solid rgba(255,196,107,.16); }
 .entry-page .text { font-weight: 500; }
-.entry-clue { background: var(--panel); border: 1px solid var(--line); }
+.entry-clue { background: rgba(107,213,232,.05); border: 1px solid rgba(107,213,232,.16); }
+.entry-reject { background: rgba(255,107,107,.03); border: 1px solid rgba(255,107,107,.1); }
 .entry-reject .text { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(255,107,107,.5); }
+.entry-near { background: rgba(255,196,107,.05); border: 1px solid rgba(255,196,107,.16); }
 .entry-near .text { color: var(--amber); }
 .entry-resolve { background: rgba(87,217,147,.07); border: 1px solid rgba(87,217,147,.25); }
 .entry-resolve .text { color: var(--green); font-weight: 500; }
