@@ -2,10 +2,11 @@ import { neon } from "@neondatabase/serverless";
 
 // ---------------------------------------------------------------------------
 // Serves the daily incident pool from Neon (authored via incidents.json +
-// scripts/seed-incidents.mjs). Wordle-style: day N since DAILY_EPOCH plays
-// incidents[N % length], so everyone gets the same incident on the same local
-// calendar day and the pool cycles when the calendar outruns it — add
-// incidents faster than the calendar eats them.
+// scripts/seed-incidents.mjs). Wordle-style: day N since DAILY_EPOCH plays the
+// row whose num is N, so everyone gets the same incident on the same local
+// calendar day. The num column IS the schedule — a day with no matching num
+// shows a "no incident scheduled" page, so keep numbering ahead of the
+// calendar.
 //
 // Only rows with a num are dailies. Custom incidents (num NULL) are reachable
 // solely through their unguessable /a/<ic_...> link (api/incident.js) and must
