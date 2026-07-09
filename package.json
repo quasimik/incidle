@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "vercel dev",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "^1.0.19",
+    "@neondatabase/serverless": "^1.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

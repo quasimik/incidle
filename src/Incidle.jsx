@@ -1,18 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import uFuzzy from "@leeoniya/ufuzzy";
-import ROOT_CAUSES from "../incident_root_causes.json";
-
-// ---------------------------------------------------------------------------
-// ANSWER LIST — fixed taxonomy of root causes, loaded from the data file.
-// Guesses are selected from this list (autocomplete), so alias-matching
-// problems never occur. Each entry: id, name, aliases, description, tags
-// (sorted important-first; tags[0] is the primary group, and an `external`
-// first tag marks causes outside the team's control), plus four diagnostic
-// axes (detection_signal, onset_shape, correlation, blast_radius) that are
-// deliberately not wired into gameplay yet.
-// ---------------------------------------------------------------------------
-const ANSWERS = ROOT_CAUSES.root_causes;
-const answerById = Object.fromEntries(ANSWERS.map((a) => [a.id, a]));
 
 // ---------------------------------------------------------------------------
 // CASES — the paging vignette and the stack primer are free. Every action
@@ -79,41 +66,54 @@ const CASES = [
 ];
 
 // ---------------------------------------------------------------------------
-// helpers
+// ANSWER LIST — fixed taxonomy of root causes, fetched at runtime from
+// /api/root-causes (Neon Postgres; same shape the old JSON file had).
+// Guesses are selected from this list (autocomplete), so alias-matching
+// problems never occur. Each entry: id, name, aliases, description, tags
+// (sorted important-first; tags[0] is the primary group, and an `external`
+// first tag marks causes outside the team's control), plus four diagnostic
+// axes (detection_signal, onset_shape, correlation, blast_radius) that are
+// deliberately not wired into gameplay yet.
 // ---------------------------------------------------------------------------
 // Fuzzy matching via uFuzzy: single-error typo tolerance within terms,
 // out-of-order terms. Haystack rows are each answer's name plus each alias,
 // mapped back to the answer; best-ranked row wins per answer.
 const uf = new uFuzzy({ intraMode: 1, intraIns: 1, intraSub: 1, intraTrn: 1, intraDel: 1 });
-const HAY = [];
-const HAY_ANS = []; // parallel to HAY: { a, alias } — alias null on name rows
-for (const a of ANSWERS) {
-  HAY.push(a.name);
-  HAY_ANS.push({ a, alias: null });
-  for (const al of a.aliases) {
-    HAY.push(al);
-    HAY_ANS.push({ a, alias: al });
-  }
-}
 
-// suggestions: [{ a, alias, ranges }] — ranges are [from,to) pairs into the
-// matched string (the name, or the alias when the hit came from one)
-function matchAnswers(q) {
-  const s = q.trim();
-  if (!s) return [];
-  const [idxs, info, order] = uf.search(HAY, s, 3);
-  if (!idxs || idxs.length === 0) return [];
-  const out = [];
-  const seen = new Set();
-  for (const oi of order ?? idxs.map((_, i) => i)) {
-    const hi = info ? info.idx[oi] : idxs[oi];
-    const { a, alias } = HAY_ANS[hi];
-    if (seen.has(a.id)) continue;
-    seen.add(a.id);
-    out.push({ a, alias, ranges: info ? info.ranges[oi] : null });
-    if (out.length === 7) break;
+function buildMatcher(answers) {
+  const answerById = Object.fromEntries(answers.map((a) => [a.id, a]));
+  const hay = [];
+  const hayAns = []; // parallel to hay: { a, alias } — alias null on name rows
+  for (const a of answers) {
+    hay.push(a.name);
+    hayAns.push({ a, alias: null });
+    for (const al of a.aliases) {
+      hay.push(al);
+      hayAns.push({ a, alias: al });
+    }
   }
-  return out;
+
+  // suggestions: [{ a, alias, ranges }] — ranges are [from,to) pairs into the
+  // matched string (the name, or the alias when the hit came from one)
+  function matchAnswers(q) {
+    const s = q.trim();
+    if (!s) return [];
+    const [idxs, info, order] = uf.search(hay, s, 3);
+    if (!idxs || idxs.length === 0) return [];
+    const out = [];
+    const seen = new Set();
+    for (const oi of order ?? idxs.map((_, i) => i)) {
+      const hi = info ? info.idx[oi] : idxs[oi];
+      const { a, alias } = hayAns[hi];
+      if (seen.has(a.id)) continue;
+      seen.add(a.id);
+      out.push({ a, alias, ranges: info ? info.ranges[oi] : null });
+      if (out.length === 7) break;
+    }
+    return out;
+  }
+
+  return { answerById, matchAnswers };
 }
 
 // wrap matched ranges in <mark>
@@ -149,7 +149,49 @@ const TAG = {
 // ---------------------------------------------------------------------------
 // component
 // ---------------------------------------------------------------------------
+// Loader shell: the game is unplayable without the answer list, so hold at a
+// boot screen until the fetch lands (or offer a retry if it doesn't).
 export default function Incidle() {
+  const [answers, setAnswers] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    fetch("/api/root-causes")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => !cancelled && setAnswers(d.root_causes))
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  if (!answers) {
+    return (
+      <div className="idle-root">
+        <style>{CSS}</style>
+        <div className="boot">
+          {failed ? (
+            <>
+              <span>couldn't reach the incident database.</span>
+              <button className="btn btn-ghost" onClick={() => setAttempt(attempt + 1)}>
+                retry
+              </button>
+            </>
+          ) : (
+            <span>connecting…</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return <Game answers={answers} />;
+}
+
+function Game({ answers }) {
+  const { answerById, matchAnswers } = useMemo(() => buildMatcher(answers), [answers]);
   const [caseIdx, setCaseIdx] = useState(0);
   const [feed, setFeed] = useState(() => initialFeed(0));
   const [actions, setActions] = useState([]); // "obs" | "wrong" | "solve" — one per hour burned
@@ -168,7 +210,7 @@ export default function Incidle() {
   const maxClues = c.clues.length;
   const revealed = actions.filter((a) => a === "obs").length;
   const hoursUsed = actions.length;
-  const suggestions = useMemo(() => matchAnswers(query), [query]);
+  const suggestions = useMemo(() => matchAnswers(query), [query, matchAnswers]);
   const sel = Math.min(selIdx, Math.max(suggestions.length - 1, 0));
 
   function initialFeed(idx) {
@@ -482,6 +524,11 @@ const CSS = `
 .pip-wrong { background: var(--red); }
 .pip-solve { background: var(--green); }
 .budget-label { margin-left: 8px; color: var(--muted); font-size: 12.5px; }
+
+.boot {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px;
+  color: var(--muted);
+}
 
 .feed { flex: 1; overflow-y: auto; padding: 18px 16px 24px; max-width: 860px; width: 100%; margin: 0 auto; }
 .entry {
