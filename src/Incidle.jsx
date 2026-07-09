@@ -6,7 +6,10 @@ import uFuzzy from "@leeoniya/ufuzzy";
 // after that — revealing an observation or testing a hypothesis (right or
 // wrong) — burns one hour of the HOURS budget. Unresolved at T+HOURS, the
 // incident escalates.
-// Clue order mirrors real triage: symptom → metrics → changes → smoking gun.
+// Clues are ordered by information gained toward the root cause, not by real
+// triage sequence — roughly 10% / 40% / 70% / 95% of the diagnosis is in hand
+// after clue 1 / 2 / 3 / 4. Clue 1 fits many causes (incl. the nearIds); each
+// later clue eliminates a distractor until clue 4 all but names the mechanism.
 // nearIds get a "directionally right" response but still cost the hour.
 // topology: what the responder would already know — relevant or apparently
 // relevant only, never exhaustive. It shapes the hypothesis space for free.
@@ -16,13 +19,13 @@ const CASES = [
     num: 1,
     sev: 2,
     topology:
-      "`checkout-api` fronts the purchase flow and calls `payments-svc` for card auth against a third-party processor. Several backend services share one Postgres primary (`max_connections` 500). Sessions live in Redis. Teams deploy independently, many times a day.",
+      "`checkout-api` fronts the purchase flow and calls `payments-svc` synchronously for card auth against a third-party processor. `payments-svc` and several unrelated services share one Postgres primary capped at 500 connections, each holding its own pool against it. Teams own their services and deploy independently, many times a day.",
     vignette: "PAGE — checkout error rate at 4% and climbing. Users seeing 503s at payment step.",
     clues: [
-      "All failures are 503s originating from `payments-svc`. Every other endpoint is healthy.",
-      "`payments-svc` looks fine: CPU and memory normal, zero restarts, latency on successful requests unchanged.",
-      "Deploy log: `promo-svc` shipped 25 minutes ago. Different team. No shared code with payments.",
-      "Postgres (payments db): active connections pinned at 500/500. Most are `idle in transaction` — owned by `promo-svc`.",
+      "The failures are all 503s from `payments-svc`; every other endpoint in checkout is healthy.",
+      "`payments-svc`'s own code hasn't shipped in days, and its logs, CPU, and memory are clean — successful calls are as fast as ever, but a growing share of requests are rejected before they ever run.",
+      "Those rejected requests are all stuck waiting to check out a database connection; the worker threads themselves sit idle, not pegged.",
+      "Postgres is pinned at 500/500 connections, nearly all `idle in transaction` and held by `promo-svc` — which deployed 25 minutes ago — leaving none for `payments-svc`.",
     ],
     answerId: "connection_pool_exhaustion",
     nearIds: ["bad_code_deploy", "thread_pool_exhaustion"],
@@ -33,13 +36,13 @@ const CASES = [
     num: 2,
     sev: 3,
     topology:
-      "`product-page` renders server-side off a Postgres read pool. Expensive aggregations are cached look-aside in Redis with TTLs. A CDN caches full pages for anonymous traffic, and assorted cron jobs run housekeeping on fixed schedules.",
+      "`product-page` renders server-side from a Postgres read pool, with expensive aggregations cached look-aside in Redis under fixed TTLs. A CDN fronts anonymous traffic and scheduled jobs refresh assorted data on the clock. Redis is the only thing standing between normal traffic and a very expensive query.",
     vignette: "PAGE — database CPU alarms firing in bursts. Product pages crawl for ~30s, recover, then it happens again.",
     clues: [
-      "The spikes land exactly on a 15-minute grid: :00, :15, :30, :45.",
-      "During each spike the DB runs the same expensive query hundreds of times concurrently — the top-sellers aggregation.",
-      "Redis is healthy overall, but the hit rate for one key drops to zero at each spike, then recovers.",
-      "The `top_sellers` key: TTL 900 seconds, no jitter. Recomputing it takes about 8 seconds.",
+      "Every burst is pure database saturation — app servers, the network, and Redis's own latency all stay normal; only the DB gets pegged, then it recovers.",
+      "The bursts land on a fixed clock grid — :00, :15, :30, :45 — not on traffic peaks, deploys, or any restart or flush.",
+      "In each burst the DB runs one expensive query — the top-sellers aggregation — hundreds of times at once, while Redis as a whole stays perfectly healthy.",
+      "The `top_sellers` key has a 900-second TTL with no jitter; the instant it expires its hit rate hits zero, and every concurrent request spends the ~8s recompute hammering the DB until one of them repopulates it.",
     ],
     answerId: "cache_stampede",
     nearIds: ["cache_hit_rate_collapse"],
@@ -50,13 +53,13 @@ const CASES = [
     num: 3,
     sev: 3,
     topology:
-      "auth issues short-lived signed tokens (JWT, 15-minute expiry) that services verify locally against weekly-rotated keys. Verification runs on three pools of long-lived VMs behind a round-robin balancer. A security-hardening pass tightened baseline host configs recently.",
+      "`auth` issues short-lived JWTs (15-minute expiry) that each service verifies locally against weekly-rotated signing keys. Verification runs on three pools of long-lived VMs behind a round-robin balancer. A security-hardening pass recently tightened baseline host configs fleet-wide.",
     vignette: "PAGE — 0.7% of API calls failing with 401 invalid token. The same user's token works fine on retry.",
     clues: [
-      "Every failure was verified on host pool C. Pools A and B have zero.",
-      "Rejection reason in logs: 'token used before issued' — the token's `iat` timestamp is in the future.",
-      "`chrony` isn't running on pool C — a hardening script disabled the wrong unit across that pool.",
-      "Drift accumulates ~2s/day. The 401 rate has been creeping upward for six weeks and nobody connected the dots.",
+      "The 401s look random — scattered across users, endpoints, and times of day, with no burst or trend that stands out at a glance.",
+      "But they aren't user- or token-specific: retries succeed, and every failed verification traces back to host pool C — pools A and B have zero.",
+      "Pool C rejects with 'token used before issued': it reads the token's `iat` timestamp as being in the future. The signing keys are valid and identical on all three pools.",
+      "`chrony` isn't running on pool C — a hardening script disabled the wrong unit there — so its clocks have drifted ~2s/day for weeks, which is why the 401 rate crept upward instead of spiking.",
     ],
     answerId: "clock_skew",
     nearIds: ["credential_expiry"],
