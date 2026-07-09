@@ -85,10 +85,10 @@ const CASES = [
 // surfaces every external cause (vendor outage, cloud provider outage, …).
 const uf = new uFuzzy({ intraMode: 1, intraIns: 1, intraSub: 1, intraTrn: 1, intraDel: 1 });
 
-// Only the first HOTKEYS matches are shown, each with a number-key shortcut;
-// any beyond that collapse into a "-- N more --" hint. The list stays short and
-// every visible option is pressable — narrow the query to surface the rest.
-const HOTKEYS = 6;
+// Only the first MAX_SUGGESTIONS matches are shown; any beyond that collapse
+// into a "-- N more --" hint. The list stays short — narrow the query to
+// surface the rest.
+const MAX_SUGGESTIONS = 6;
 
 function buildMatcher(answers) {
   const answerById = Object.fromEntries(answers.map((a) => [a.id, a]));
@@ -107,7 +107,7 @@ function buildMatcher(answers) {
     }
   }
 
-  // Returns { items, more }: items is up to HOTKEYS matches, each
+  // Returns { items, more }: items is up to MAX_SUGGESTIONS matches, each
   // { a, hit, kind, ranges } — kind is "name" | "alias" | "tag", ranges are
   // [from,to) pairs into the matched string (name / alias / tag); more is the
   // count of further distinct matches, shown only as a "-- N more --" hint.
@@ -132,7 +132,7 @@ function buildMatcher(answers) {
         all.push({ a, hit, kind, ranges: info ? info.ranges[oi] : null });
       }
     }
-    return { items: all.slice(0, HOTKEYS), more: Math.max(0, all.length - HOTKEYS) };
+    return { items: all.slice(0, MAX_SUGGESTIONS), more: Math.max(0, all.length - MAX_SUGGESTIONS) };
   }
 
   return { answerById, matchAnswers };
@@ -226,7 +226,6 @@ function Game({ answers }) {
   const [query, setQuery] = useState("");
   const [guessedIds, setGuessedIds] = useState([]);
   const [selIdx, setSelIdx] = useState(0); // highlighted suggestion
-  const [staged, setStaged] = useState(null); // confirmed pick, awaiting submit
   const [inputFocused, setInputFocused] = useState(false);
   const [copied, setCopied] = useState(false);
   // Show the how-to-play once, then remember it was seen. Guarded so a blocked
@@ -322,7 +321,6 @@ function Game({ answers }) {
     if (status !== "active" || !ans || guessedIds.includes(ans.id)) return;
     lastGuessAt.current = Date.now();
     setQuery("");
-    setStaged(null);
     setSelIdx(0);
     const hit = ans.id === c.answerId;
     const newActions = [...actions, hit ? "solve" : "wrong"];
@@ -344,41 +342,36 @@ function Game({ answers }) {
     settle([...feed, entry], newActions);
   }
 
-  // Two-step guess: confirm a suggestion (enter / number / click / arrows+enter)
-  // to stage it, then Guess button or a second enter submits it.
-  function confirmPick(ans) {
-    if (guessedIds.includes(ans.id)) return;
-    setStaged(ans);
-    setQuery(ans.name);
-    setSelIdx(0);
-    focusInput(); // keep enter-to-submit working after a click
+  // One-step guess: picking a suggestion (click / enter / action button)
+  // submits it immediately — staging forced a second tap on mobile, after the
+  // keyboard had already dismissed and shifted the layout.
+  function pick(ans) {
+    handleGuess(ans);
+    focusInput(); // a button click shouldn't strand focus off the input
   }
 
   function onKeyDown(e) {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (staged) handleGuess(staged);
-      else if (suggestions.length > 0) confirmPick(suggestions[sel].a);
+      if (suggestions.length > 0) pick(suggestions[sel].a);
       else if (query.trim() === "" && !e.repeat && Date.now() - lastGuessAt.current > 400) handleInvestigate();
       return;
     }
     if (e.key === "Escape") {
       e.preventDefault();
       setQuery("");
-      setStaged(null);
       setSelIdx(0);
       return;
     }
-    if (staged || suggestions.length === 0) return;
+    // digits are not hotkeys: answer names contain them ("S3", "429s", "N+1"),
+    // and picks submit immediately — a mis-hit digit would burn an hour
+    if (suggestions.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelIdx(Math.min(sel + 1, suggestions.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelIdx(Math.max(sel - 1, 0));
-    } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= suggestions.length) {
-      e.preventDefault();
-      confirmPick(suggestions[Number(e.key) - 1].a);
     }
   }
 
@@ -391,7 +384,6 @@ function Game({ answers }) {
     setQuery("");
     setGuessedIds([]);
     setSelIdx(0);
-    setStaged(null);
     setCopied(false);
     setTimeout(focusInput, 50);
   }
@@ -415,7 +407,7 @@ function Game({ answers }) {
 
   const done = status !== "active";
   // one action button: investigate on empty field, guess otherwise
-  const investigateMode = !staged && query.trim() === "";
+  const investigateMode = query.trim() === "";
   const enterInvestigates = inputFocused && investigateMode && revealed < maxClues;
 
   return (
@@ -497,14 +489,13 @@ function Game({ answers }) {
             <div className="combo">
               <input
                 ref={inputRef}
-                className={`combo-input ${staged ? "combo-input-staged" : ""} ${
+                className={`combo-input ${
                   !inputFocused ? "combo-input-blurred" : query ? "combo-input-clearable" : ""
                 }`}
                 value={query}
                 placeholder="guess root cause… (type to search)"
                 onChange={(e) => {
                   setQuery(e.target.value);
-                  setStaged(null);
                   setSelIdx(0);
                 }}
                 onKeyDown={onKeyDown}
@@ -520,7 +511,7 @@ function Game({ answers }) {
                   <kbd className="key">esc</kbd> clear
                 </span>
               ) : null}
-              {!staged && suggestions.length > 0 && (
+              {suggestions.length > 0 && (
                 <ul className="combo-list" role="listbox">
                   {suggestions.map((sug, i) => {
                     const used = guessedIds.includes(sug.a.id);
@@ -528,11 +519,10 @@ function Game({ answers }) {
                       <li key={sug.a.id}>
                         <button
                           className={`combo-opt ${i === sel ? "combo-opt-sel" : ""} ${used ? "combo-opt-used" : ""}`}
-                          onClick={() => confirmPick(sug.a)}
+                          onClick={() => pick(sug.a)}
                           disabled={used}
                         >
                           <span className="opt-main">
-                            <kbd className="key">{i + 1}</kbd>
                             <span>{sug.kind === "name" ? highlight(sug.a.name, sug.ranges) : sug.a.name}</span>
                             {sug.kind === "alias" && (
                               <span className="alias-hit">{highlight(sug.hit, sug.ranges)}</span>
@@ -557,11 +547,15 @@ function Game({ answers }) {
             </div>
             <button
               className={`btn action-btn ${investigateMode ? "btn-secondary" : "btn-primary"} ${enterInvestigates ? "btn-armed" : ""}`}
-              onClick={() => (investigateMode ? handleInvestigate() : staged && handleGuess(staged))}
-              disabled={investigateMode ? revealed >= maxClues : !staged}
+              onClick={() => (investigateMode ? handleInvestigate() : suggestions.length > 0 && pick(suggestions[sel].a))}
+              disabled={
+                investigateMode
+                  ? revealed >= maxClues
+                  : suggestions.length === 0 || guessedIds.includes(suggestions[sel].a.id)
+              }
             >
               {investigateMode ? "investigate" : "root-cause"}
-              {CAN_HOVER && (enterInvestigates || staged) ? (
+              {CAN_HOVER && enterInvestigates ? (
                 <kbd className="key">↵</kbd>
               ) : (
                 <span className="dot" aria-hidden="true">·</span>
@@ -825,7 +819,6 @@ const CSS = `
   font-size: 14px;
 }
 .combo-input::placeholder { color: var(--muted); }
-.combo-input-staged { border-color: rgba(87,217,147,.6); }
 .combo-input-blurred { padding-right: 38px; } /* room for the ↵ refocus hint */
 .combo-input-clearable { padding-right: 82px; } /* room for the "esc clear" hint */
 .combo-focus-hint, .combo-clear-hint {
@@ -860,9 +853,7 @@ const CSS = `
 }
 .combo-more {
   color: var(--muted); font-size: 11.5px; letter-spacing: 0.08em; line-height: 19px;
-  /* match a result row's height (9px pad + 19px content) and left-align with the
-     label column: combo-opt padding-left (11px) + .key box (19px) + gap (9px) */
-  padding: 9px 11px 9px calc(11px + 19px + 9px);
+  padding: 9px 11px; /* match a result row's height (9px pad + 19px content) */
 }
 .combo-opt mark { background: none; color: var(--cyan); font-weight: 600; }
 .alias-hit { color: var(--muted); font-size: 12.5px; }
@@ -928,11 +919,9 @@ const CSS = `
 
 /* Touch devices: keyboard hints (enter / esc / number keys) are dead weight. */
 @media (hover: none) {
-  .combo-focus-hint, .combo-clear-hint, .enter-hint,
-  .combo-opt .key { display: none; }
+  .combo-focus-hint, .combo-clear-hint, .enter-hint { display: none; }
   .combo-input-blurred { padding-right: 13px; }
   .combo-input-clearable { padding-right: 13px; }
-  .combo-more { padding-left: 11px; }
   .combo-opt { padding-top: 11px; padding-bottom: 11px; } /* bigger tap targets */
 }
 `;
