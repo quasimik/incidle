@@ -221,6 +221,12 @@ function Game({ answers }) {
   const [staged, setStaged] = useState(null); // confirmed pick, awaiting submit
   const [inputFocused, setInputFocused] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Show the how-to-play once, then remember it was seen. Guarded so a blocked
+  // localStorage (private mode) just falls back to showing the intro.
+  const [showHelp, setShowHelp] = useState(() => {
+    try { return !localStorage.getItem("incidle:intro-seen"); }
+    catch { return true; }
+  });
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
@@ -240,6 +246,18 @@ function Game({ answers }) {
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });
   }, [feed, status]);
+
+  function dismissHelp() {
+    setShowHelp(false);
+    try { localStorage.setItem("incidle:intro-seen", "1"); } catch {}
+  }
+
+  useEffect(() => {
+    if (!showHelp) return;
+    const onKey = (e) => e.key === "Escape" && dismissHelp();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showHelp]);
 
   function eventTime(n) {
     return `T+${n}`;
@@ -279,14 +297,14 @@ function Game({ answers }) {
     if (hit) {
       setFeed([
         ...feed,
-        { type: "resolve", time: t, text: `Root cause confirmed: ${ans.name}.` },
+        { type: "resolve", time: t, text: `${ans.name}` },
       ]);
       setStatus("solved");
       return;
     }
     const near = c.nearIds?.includes(ans.id);
     const entry = near
-      ? { type: "near", time: t, text: `${ans.name} — directionally right, but name the mechanism. What exactly broke?` }
+      ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
       : { type: "reject", time: t, text: `${ans.name}` };
     setGuessedIds([...guessedIds, ans.id]);
     settle([...feed, entry], newActions);
@@ -378,6 +396,14 @@ function Game({ answers }) {
           <span className="case-num">
             incident {caseIdx + 1}/{CASES.length}
           </span>
+          <button
+            className="help-btn"
+            onClick={() => setShowHelp(true)}
+            aria-label="How to play"
+            title="How to play"
+          >
+            ?
+          </button>
         </div>
         <div className="hdr-right">
           <span className={`sev sev-${c.sev}`}>SEV{c.sev}</span>
@@ -510,6 +536,48 @@ function Game({ answers }) {
           </div>
         </footer>
       )}
+
+      {showHelp && (
+        <div className="modal-scrim" onClick={dismissHelp}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="How to play"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">HOW TO PLAY</div>
+            <p className="modal-lede">
+              You're on call. An incident just paged you—find the root cause before it escalates.
+            </p>
+            <ul className="modal-steps">
+              <li>
+                <span className="step-icon">🔍</span>
+                <div>
+                  <b className="hl-amber">Investigate</b> to reveal the next observation.
+                </div>
+              </li>
+              <li>
+                <span className="step-icon">🎯</span>
+                <div>
+                  <b className="hl-green">Root-cause</b> it by naming the culprit.
+                </div>
+              </li>
+              <li>
+                <span className="step-icon">⏳</span>
+                <div>
+                  Every move (both <b className="hl-amber">investigate</b> and{" "}
+                  <b className="hl-green">root-cause</b>) burns{" "}
+                    <b>1&nbsp;hour</b>. At T+{HOURS} the incident escalates.
+                </div>
+              </li>
+            </ul>
+            <button className="btn btn-primary modal-btn" onClick={dismissHelp} autoFocus>
+              start triage →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -541,6 +609,13 @@ const CSS = `
 .hdr-left, .hdr-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .brand { font-weight: 600; letter-spacing: 0.18em; font-size: 14px; }
 .case-num { color: var(--muted); font-size: 12.5px; }
+.help-btn {
+  width: 21px; height: 21px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  font-size: 12px; line-height: 1;
+}
+.help-btn:hover { border-color: var(--cyan); color: var(--cyan); }
 .svc { font-size: 12.5px; color: var(--cyan); }
 .sev {
   font-size: 11px; font-weight: 600;
@@ -644,6 +719,54 @@ const CSS = `
   border: 1px solid var(--line); color: var(--muted);
   font-size: 12.5px; white-space: pre-wrap;
 }
+
+.modal-scrim {
+  position: fixed; inset: 0; z-index: 50; padding: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6,9,16,.72); backdrop-filter: blur(2px);
+  animation: fade .2s ease-out;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  width: 100%; max-width: 460px; padding: 22px 22px 20px;
+  border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  animation: modal-in .24s ease-out;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-scrim, .modal { animation: none; }
+}
+.modal-head {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--cyan); margin-bottom: 12px;
+}
+.modal-lede {
+  margin: 0 0 18px; line-height: 1.55; font-size: 15px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.modal-steps {
+  list-style: none; margin: 0 0 20px; padding: 0;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modal-steps li {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: start;
+}
+/* Match the icon's line box to the text's first line (14px × 1.5 = 21px) so the
+   emoji centers on the first line no matter how many lines the step wraps to. */
+.step-icon { font-size: 18px; line-height: 21px; }
+.modal-steps div {
+  line-height: 21px; font-size: 14px;
+  font-family: 'Inter', system-ui, sans-serif; color: var(--text);
+}
+.modal-steps b { font-weight: 600; }
+.hl-amber { color: var(--amber); }
+.hl-green { color: var(--green); }
+.modal-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
 
 .dock {
   display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 28px;
