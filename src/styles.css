@@ -263,6 +263,14 @@ a.brand:hover { color: var(--cyan); }
   font-size: 14px;
 }
 .acct-input::placeholder { color: var(--muted); }
+.acct-pw { position: relative; }
+.acct-pw .acct-input { padding-right: 58px; } /* room for the show/hide toggle */
+.acct-pw-btn {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  padding: 0; border: 0; background: none;
+  color: var(--muted); font-size: 12.5px;
+}
+.acct-pw-btn:hover { color: var(--cyan); }
 .acct-err { margin: 10px 0 0; color: var(--red); font-size: 12.5px; }
 .acct-switch { margin: 12px 0 0; text-align: center; color: var(--muted); font-size: 12.5px; }
 .acct-switch-btn {

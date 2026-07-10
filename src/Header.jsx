@@ -78,6 +78,15 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
             </button>
             {menuOpen && (
               <nav className="menu">
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowAccount(true);
+                  }}
+                >
+                  {user ? "account" : "log in"}
+                </button>
                 <Link className="menu-item" href="/archive" onClick={() => setMenuOpen(false)}>
                   past incidents
                 </Link>
@@ -107,15 +116,6 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
                   }}
                 >
                   about
-                </button>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setShowAccount(true);
-                  }}
-                >
-                  {user ? "account" : "sign in"}
                 </button>
               </nav>
             )}

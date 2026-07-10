@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { auth } from "./auth.js";
 
-// Sign-in / account modal (menu → sign in). Google hands the tab to the
+// Log-in / account modal (menu → log in). Google hands the tab to the
 // OAuth flow and Neon Auth redirects back to the page the user left; email +
 // password settles in place. `user` is the signed-in user or null/undefined;
 // onChange asks the parent to re-fetch the session after anything here
@@ -10,6 +10,7 @@ export default function AccountModal({ user, onClose, onChange }) {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +26,7 @@ export default function AccountModal({ user, onClose, onChange }) {
     const { error } = await auth.signInGoogle({ callbackURL: window.location.href });
     // on success the browser is already navigating away
     if (error) {
-      setErr(error.message || "sign-in failed — try again");
+      setErr(error.message || "log-in failed — try again");
       setBusy(false);
     }
   }
@@ -44,7 +45,7 @@ export default function AccountModal({ user, onClose, onChange }) {
         : await auth.signInEmail({ email, password });
     setBusy(false);
     if (error) {
-      setErr(error.message || "sign-in failed — try again");
+      setErr(error.message || "log-in failed — try again");
       return;
     }
     onChange();
@@ -63,22 +64,22 @@ export default function AccountModal({ user, onClose, onChange }) {
         className="modal acct"
         role="dialog"
         aria-modal="true"
-        aria-label={user ? "Account" : "Sign in"}
+        aria-label={user ? "Account" : "Log in"}
         onClick={(e) => e.stopPropagation()}
       >
         {user ? (
           <>
             <div className="modal-head">ACCOUNT</div>
             <p className="acct-user">
-              signed in as <b>{user.email}</b>
+              logged in as <b>{user.email}</b>
             </p>
             <button className="btn btn-ghost modal-btn" onClick={signOut}>
-              sign out
+              log out
             </button>
           </>
         ) : (
           <>
-            <div className="modal-head">{mode === "signup" ? "CREATE ACCOUNT" : "SIGN IN"}</div>
+            <div className="modal-head">{mode === "signup" ? "CREATE ACCOUNT" : "LOG IN"}</div>
             <button className="btn btn-ghost modal-btn" onClick={google} disabled={busy}>
               continue with google
             </button>
@@ -93,17 +94,27 @@ export default function AccountModal({ user, onClose, onChange }) {
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
-              <input
-                className="acct-input"
-                type="password"
-                placeholder="password"
-                autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="acct-pw">
+                <input
+                  className="acct-input"
+                  type={showPw ? "text" : "password"}
+                  placeholder="password"
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="acct-pw-btn"
+                  onClick={() => setShowPw(!showPw)}
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                >
+                  {showPw ? "hide" : "show"}
+                </button>
+              </div>
               <button className="btn btn-primary modal-btn" type="submit" disabled={busy}>
-                {mode === "signup" ? "create account" : "sign in"}
+                {mode === "signup" ? "create account" : "log in"}
               </button>
             </form>
             {err && <p className="acct-err">{err}</p>}
@@ -117,7 +128,7 @@ export default function AccountModal({ user, onClose, onChange }) {
                   setErr(null);
                 }}
               >
-                {mode === "signup" ? "sign in" : "create one"}
+                {mode === "signup" ? "log in" : "create one"}
               </button>
             </p>
           </>
