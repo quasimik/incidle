@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
-import { loadRun, saveRun } from "./runs.js";
+import { loadRun, saveRun, mintPlayId } from "./runs.js";
 import Header from "./Header.jsx";
 import { highlight, rich } from "./text.jsx";
 
@@ -30,6 +30,27 @@ async function postGuess(body) {
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+// "42 responders · 62% resolved · median solve T+4 · most-suspected red
+// herring: cache stampede" — or a first-responder nod when the log holds only
+// this play. Median is over solved plays; the red herring needs 2+ votes so one
+// stray guess doesn't get billed as the crowd's favorite.
+function crowdLine(stats, answerById) {
+  if (stats.played === 1) return "you're the first responder on this incident.";
+  const parts = [
+    `${stats.played} responders`,
+    `${Math.round((stats.solved / stats.played) * 100)}% resolved`,
+  ];
+  if (stats.solved > 0) {
+    let left = Math.floor((stats.solved - 1) / 2) + 1; // lower median
+    let med = 0;
+    while (left > 0 && med < stats.hours.length) left -= stats.hours[med++];
+    parts.push(`median solve T+${med}`);
+  }
+  const herring = stats.topWrong?.n >= 2 && answerById[stats.topWrong.id]?.name;
+  if (herring) parts.push(`most-suspected red herring: ${herring}`);
+  return parts.join(" · ");
 }
 
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
@@ -85,6 +106,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
+  const [playId] = useState(() => saved?.i ?? mintPlayId()); // dedupe key for the server's plays log
   // { answerId, postmortem } — arrives from /api/guess when the run ends
   const [reveal, setReveal] = useState(() => saved?.r ?? null);
   const [feed, setFeed] = useState(() =>
@@ -99,6 +121,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false); // a verdict request is in flight
   const [netFail, setNetFail] = useState(false);
+  const [crowd, setCrowd] = useState(null); // global per-incident stats, fetched once the play ends
   const [overlayUp, setOverlayUp] = useState(false); // a header modal is covering the page
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -118,9 +141,24 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       a: actions,
       g: guessedIds,
       t: startedAt,
+      i: playId,
       ...(reveal && { r: reveal }),
     });
-  }, [storageKey, status, actions, guessedIds, startedAt, reveal]);
+  }, [storageKey, status, actions, guessedIds, startedAt, playId, reveal]);
+
+  // how everyone else did — spoiler-safe only after the verdict, so nothing
+  // is requested while the run is live. Best-effort: no strip on failure.
+  useEffect(() => {
+    if (status === "active") return;
+    let alive = true;
+    fetch(`/api/stats?key=${storageKey}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => alive && s?.played > 0 && setCrowd(s))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [status, storageKey]);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });
@@ -177,7 +215,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setNetFail(false);
     setBusy(true);
     try {
-      const r = await postGuess({ key: storageKey, hour });
+      const r = await postGuess({ key: storageKey, hour, playId, guesses: guessedIds });
       setActions([...actions, "obs"]);
       finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
     } catch {
@@ -194,7 +232,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setBusy(true);
     let r;
     try {
-      r = await postGuess({ key: storageKey, guessId: ans.id, hour });
+      r = await postGuess({ key: storageKey, guessId: ans.id, hour, playId, guesses: guessedIds });
     } catch {
       setNetFail(true);
       setBusy(false);
@@ -349,6 +387,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               </div>
             )}
             {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
+            {crowd && <p className="post-stats">{crowdLine(crowd, answerById)}</p>}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

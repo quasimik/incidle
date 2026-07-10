@@ -125,6 +125,12 @@ a.brand:hover { color: var(--cyan); }
   line-height: 1.55; color: var(--muted);
   background: rgba(107,213,232,.04); border: 1px dashed rgba(107,213,232,.2);
 }
+/* the crowd's verdict on this incident (GET /api/stats) — one muted line
+   between the postmortem prose and the share buttons */
+.post-stats {
+  margin: 0 0 14px; font-size: 13px; color: var(--muted);
+  font-family: 'Inter', system-ui, sans-serif;
+}
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 
