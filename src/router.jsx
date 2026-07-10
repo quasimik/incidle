@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 // ---------------------------------------------------------------------------
 // ROUTES — real paths via the History API. Vercel rewrites every request that
@@ -34,14 +34,18 @@ export function navigate(to, { replace = false } = {}) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+// useSyncExternalStore re-reads the snapshot when it subscribes, so a
+// navigate() fired from a child's effect — before this hook's listener is
+// attached — can't be missed (a plain state-plus-listener version stranded
+// out-of-range day URLs on a blank RedirectHome).
+function subscribe(cb) {
+  window.addEventListener("popstate", cb);
+  return () => window.removeEventListener("popstate", cb);
+}
+
 export function useRoute() {
-  const [route, setRoute] = useState(() => parsePath(window.location.pathname));
-  useEffect(() => {
-    const onPop = () => setRoute(parsePath(window.location.pathname));
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
-  return route;
+  const pathname = useSyncExternalStore(subscribe, () => window.location.pathname);
+  return useMemo(() => parsePath(pathname), [pathname]);
 }
 
 // <a> that navigates client-side; modified clicks (new tab, etc.) fall
