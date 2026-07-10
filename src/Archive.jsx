@@ -1,6 +1,7 @@
 import { DAILY_EPOCH, dayNumber, addDays, fmtShort } from "./daily.js";
 import { loadRun, listCustomRuns } from "./runs.js";
 import { Link } from "./router.jsx";
+import Header from "./Header.jsx";
 
 // Result marker for an archive row, from the saved run (if any). Rows show
 // only what localStorage knows — never the incident itself, so an unplayed
@@ -21,15 +22,14 @@ export default function Archive({ today, dailyCount }) {
   const customs = listCustomRuns();
   return (
     <div className="idle-root">
-      <header className="hdr">
-        <div className="hdr-left">
-          <Link className="brand" href="/">INCIDLE</Link>
-          <span className="svc">archive</span>
-        </div>
-        <Link className="hdr-link" href="/">
-          today →
-        </Link>
-      </header>
+      <Header
+        sub="past incidents"
+        right={
+          <Link className="hdr-link" href="/">
+            today →
+          </Link>
+        }
+      />
       <main className="feed">
         {days.length > 0 && (
           <ul className="arch-list">
@@ -62,7 +62,7 @@ export default function Archive({ today, dailyCount }) {
           </>
         )}
         {days.length === 0 && customs.length === 0 && (
-          <div className="arch-empty">nothing here yet.</div>
+          <div className="arch-empty">no incidents reported.</div>
         )}
       </main>
     </div>

@@ -60,42 +60,20 @@ function App({ answers, incidents }) {
   const n = route.view === "day" ? route.num - 1 : todayNum;
   if (n < 0 || n > todayNum) return <RedirectHome />;
   // Day #N plays the row whose num is N — the schedule is the num column
-  // itself, so a gap in the numbering is simply a day with no incident.
-  const incident = incidents.find((inc) => inc.num === n + 1);
-  if (!incident) return <NoIncident num={n + 1} isToday={n === todayNum} />;
+  // itself, so a gap in the numbering is simply a day with no incident, which
+  // Game renders as an all-clear page (a real page, not a redirect, so the
+  // URL stays inspectable).
+  const incident = incidents.find((inc) => inc.num === n + 1) ?? null;
   return (
     <Game
       key={`d${n}`}
       answers={answers}
       incident={incident}
-      title={`INCIDLE #${n + 1}`}
+      title={!incident && n === todayNum ? "INCIDLE" : `INCIDLE #${n + 1}`}
       sub={n === todayNum ? null : fmtShort(addDays(DAILY_EPOCH, n))}
       shareTag={`incidle #${n + 1}`}
       storageKey={n + 1}
     />
-  );
-}
-
-// A day with nothing scheduled — empty pool or a gap in the num column —
-// gets a real page, not a redirect, so the URL stays inspectable.
-function NoIncident({ num, isToday }) {
-  return (
-    <div className="idle-root">
-      <header className="hdr">
-        <div className="hdr-left">
-          <Link className="brand" href="/">
-            {isToday ? "INCIDLE" : `INCIDLE #${num}`}
-          </Link>
-          {!isToday && <span className="svc">{fmtShort(addDays(DAILY_EPOCH, num - 1))}</span>}
-        </div>
-        <Link className="hdr-link" href="/archive">
-          archive →
-        </Link>
-      </header>
-      <div className="boot">
-        <span>{isToday ? "no incident scheduled today." : "no incident scheduled for this day."}</span>
-      </div>
-    </div>
   );
 }
 

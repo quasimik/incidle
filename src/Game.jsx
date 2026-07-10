@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
 import { loadRun, saveRun } from "./runs.js";
-import { Link } from "./router.jsx";
+import Header from "./Header.jsx";
 import { highlight, rich } from "./text.jsx";
 
 // Touch devices get no auto-focus or programmatic refocus of the search input:
@@ -63,7 +63,28 @@ function rebuildFeed(inc, run, answerById) {
   return feed;
 }
 
-export default function Game({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl, storageKey }) {
+// A scheduled day plays its incident; a day with nothing scheduled gets the
+// same page — identical header, menu and all — over a status-page all-clear.
+export default function Game(props) {
+  if (!props.incident) return <AllClear title={props.title} sub={props.sub} />;
+  return <Run {...props} />;
+}
+
+function AllClear({ title, sub }) {
+  return (
+    <div className="idle-root">
+      <Header title={title} sub={sub} />
+      <div className="boot">
+        <span className="sys-ok">
+          <span className="ok-dot" aria-hidden="true" />
+          no incidents reported.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl, storageKey }) {
   const { answerById, matchAnswers } = useMemo(() => buildMatcher(answers), [answers]);
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
@@ -82,15 +103,7 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false); // a verdict request is in flight
   const [netFail, setNetFail] = useState(false);
-  // Show the how-to-play once, then remember it was seen. Guarded so a blocked
-  // localStorage (private mode) just falls back to showing the intro.
-  const [showHelp, setShowHelp] = useState(() => {
-    try { return !localStorage.getItem("incidle:intro-seen"); }
-    catch { return true; }
-  });
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
-  const menuRef = useRef(null);
+  const [overlayUp, setOverlayUp] = useState(false); // a header modal is covering the page
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
@@ -140,48 +153,12 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
     if (CAN_HOVER) inputRef.current?.focus();
   }
 
-  // header menu: close on any outside press or Escape
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPress = (e) => {
-      if (!menuRef.current?.contains(e.target)) setMenuOpen(false);
-    };
-    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
-    document.addEventListener("pointerdown", onPress);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPress);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [menuOpen]);
-
-  function dismissHelp() {
-    setShowHelp(false);
-    try { localStorage.setItem("incidle:intro-seen", "1"); } catch {}
-    // hand focus back to the search input the modal was covering
-    setTimeout(focusInput, 0);
-  }
-
-  useEffect(() => {
-    if (!showHelp) return;
-    const onKey = (e) => e.key === "Escape" && dismissHelp();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showHelp]);
-
-  useEffect(() => {
-    if (!showAbout) return;
-    const onKey = (e) => e.key === "Escape" && setShowAbout(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showAbout]);
-
   // Enter re-captures the search input when focus has drifted to a
   // non-interactive element (e.g. after clicking blank feed space). Real
   // controls keep their own Enter behavior; the input handles its own when
   // already focused.
   useEffect(() => {
-    if (status !== "active" || showHelp || showAbout) return;
+    if (status !== "active" || overlayUp) return;
     const onKey = (e) => {
       if (e.key !== "Enter") return;
       const el = inputRef.current;
@@ -193,7 +170,7 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [status, showHelp]);
+  }, [status, overlayUp]);
 
   function eventTime(n) {
     return `T+${n}`;
@@ -336,60 +313,26 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
 
   return (
     <div className="idle-root">
-      <header className="hdr">
-        <div className="hdr-left">
-          <div className="menu-wrap" ref={menuRef}>
-            <button
-              className="menu-btn"
-              onClick={() => setMenuOpen((o) => !o)}
-              aria-label="Menu"
-              aria-haspopup="true"
-              aria-expanded={menuOpen}
-            >
-              ☰
-            </button>
-            {menuOpen && (
-              <nav className="menu">
-                <Link className="menu-item" href="/archive" onClick={() => setMenuOpen(false)}>
-                  archive
-                </Link>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setShowHelp(true);
-                  }}
-                >
-                  help
-                </button>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setShowAbout(true);
-                  }}
-                >
-                  about
-                </button>
-              </nav>
-            )}
+      <Header
+        title={title}
+        sub={sub}
+        onHelpDismiss={() => setTimeout(focusInput, 0)} // hand focus back to the input the modal was covering
+        onOverlayChange={setOverlayUp}
+        right={
+          <div className="budget" aria-label="hour budget">
+            {Array.from({ length: HOURS }, (_, i) => (
+              <span key={i} className={`pip ${actions[i] ? `pip-${actions[i]}` : ""}`} />
+            ))}
+            <span className="budget-label">
+              {status === "active"
+                ? `${HOURS - hoursUsed} hour${HOURS - hoursUsed === 1 ? "" : "s"} until escalation`
+                : status === "solved"
+                ? `resolved at T+${hoursUsed}`
+                : `escalated at T+${HOURS}`}
+            </span>
           </div>
-          <Link className="brand" href="/">{title}</Link>
-          {sub && <span className="svc">{sub}</span>}
-        </div>
-        <div className="budget" aria-label="hour budget">
-          {Array.from({ length: HOURS }, (_, i) => (
-            <span key={i} className={`pip ${actions[i] ? `pip-${actions[i]}` : ""}`} />
-          ))}
-          <span className="budget-label">
-            {status === "active"
-              ? `${HOURS - hoursUsed} hour${HOURS - hoursUsed === 1 ? "" : "s"} until escalation`
-              : status === "solved"
-              ? `resolved at T+${hoursUsed}`
-              : `escalated at T+${HOURS}`}
-          </span>
-        </div>
-      </header>
+        }
+      />
 
       <main className="feed" aria-live="polite">
         <div className="post post-sys">
@@ -543,65 +486,6 @@ export default function Game({ answers, incident: c, title = "INCIDLE", sub, sha
         </footer>
       )}
 
-      {showHelp && (
-        <div className="modal-scrim" onClick={dismissHelp}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="How to play"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">HOW TO PLAY</div>
-            <p className="modal-lede">
-              You're on call. An incident just paged you—find the root cause before it escalates.
-            </p>
-            <ul className="modal-steps">
-              <li>
-                <span className="step-icon">🔍</span>
-                <div>
-                  <b className="hl-amber">Investigate</b> to reveal the next observation.
-                </div>
-              </li>
-              <li>
-                <span className="step-icon">🎯</span>
-                <div>
-                  <b className="hl-green">Root-cause</b> it by naming the culprit.
-                </div>
-              </li>
-              <li>
-                <span className="step-icon">⏳</span>
-                <div>
-                  Every move (both <b className="hl-amber">investigate</b> and{" "}
-                  <b className="hl-green">root-cause</b>) burns{" "}
-                    <b>1&nbsp;hour</b>. At T+{HOURS} the incident escalates.
-                </div>
-              </li>
-            </ul>
-            <button className="btn btn-primary modal-btn" onClick={dismissHelp} autoFocus>
-              start triage →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showAbout && (
-        <div className="modal-scrim" onClick={() => setShowAbout(false)}>
-          <div
-            className="modal about"
-            role="dialog"
-            aria-modal="true"
-            aria-label="About"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="about-spark">✨</div>
-            <p className="about-line">made in san francisco by michael</p>
-            <a className="about-link" href="https://mic.hael.me" target="_blank" rel="noopener noreferrer">
-              mic.hael.me
-            </a>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
