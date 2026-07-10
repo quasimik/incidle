@@ -74,7 +74,11 @@ export default function StatsModal({ onClose }) {
             <div className="stat-cap">guesses</div>
           </div>
         </div>
-        <div className="stat-note">solve time · clues · guesses average your solved runs</div>
+        <div className="stat-legend">
+          <span><i className="leg-dot leg-obs" />info</span>
+          <span><i className="leg-dot leg-guess" />wrong</span>
+          <span><i className="leg-dot leg-solve" />correct</span>
+        </div>
 
         <div className="stat-head">HOUR BY HOUR</div>
         {s.hours.map((h, i) => (
@@ -108,16 +112,13 @@ export default function StatsModal({ onClose }) {
                       aria-hidden="true"
                     />
                   ))}
+                  <span className="wf-out">
+                    {run.s === "solved" ? `T+${run.a.length}` : "escalated"}
+                  </span>
                 </li>
               ))}
             </ul>
           </>
-        )}
-
-        {s.customs > 0 && (
-          <div className="stat-specials">
-            specials: {s.customsSolved}/{s.customs} solved
-          </div>
         )}
 
         {DEV && (

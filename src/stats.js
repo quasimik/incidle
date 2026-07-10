@@ -1,11 +1,11 @@
 import { HOURS } from "./rules.js";
-import { listDailyRuns, listCustomRuns } from "./runs.js";
+import { listDailyRuns } from "./runs.js";
 
 // ---------------------------------------------------------------------------
 // PERSONAL STATS — computed from this device's saved runs, Wordle-style: no
-// account, no server. Headline numbers count dailies only; specials (ic_)
-// get a single side line. A run counts once it's finished — in-progress runs
-// are invisible here.
+// account, no server. Everything counts dailies only; specials (ic_) don't
+// figure in. A run counts once it's finished — in-progress runs are
+// invisible here.
 //
 // The distinctive axis of this game is explore vs. exploit — when a player
 // stops investigating and starts naming culprits — so past the counts, the
@@ -31,8 +31,6 @@ export function computeStats() {
   const avg = (f) =>
     solved.length ? solved.reduce((sum, { run }) => sum + f(run), 0) / solved.length : null;
 
-  const customs = listCustomRuns().filter(({ run }) => run.s !== "active");
-
   return {
     played: finished.length,
     solved: solved.length,
@@ -41,7 +39,5 @@ export function computeStats() {
     guesses: avg((r) => r.a.filter((a) => a !== "obs").length),
     hours,
     log: [...finished].sort((a, b) => b.num - a.num), // newest first, git-log style
-    customs: customs.length,
-    customsSolved: customs.filter(({ run }) => run.s === "solved").length,
   };
 }
