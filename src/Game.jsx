@@ -75,10 +75,7 @@ function AllClear({ title, sub, schedule }) {
     <div className="idle-root">
       <Header title={title} sub={sub} schedule={schedule} />
       <div className="boot">
-        <span className="sys-ok">
-          <span className="ok-dot" aria-hidden="true" />
-          no incidents reported.
-        </span>
+        <span>no incidents reported.</span>
       </div>
     </div>
   );
