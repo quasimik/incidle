@@ -13,7 +13,7 @@ function runStatus(run) {
   return <span className="arch-status arch-progress">T+{run.a.length} · in progress</span>;
 }
 
-export default function Archive({ today, dailyCount }) {
+export default function Archive({ today, dailyCount, schedule }) {
   const todayNum = Math.max(0, dayNumber(today));
   // no dailies scheduled → no calendar rows to offer
   const days =
@@ -24,6 +24,7 @@ export default function Archive({ today, dailyCount }) {
     <div className="idle-root">
       <Header
         sub="past incidents"
+        schedule={schedule}
         right={
           <Link className="hdr-link" href="/">
             today →

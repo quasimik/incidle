@@ -65,14 +65,15 @@ function rebuildFeed(inc, run, answerById) {
 // A scheduled day plays its incident; a day with nothing scheduled gets the
 // same page — identical header, menu and all — over a status-page all-clear.
 export default function Game(props) {
-  if (!props.incident) return <AllClear title={props.title} sub={props.sub} />;
+  if (!props.incident)
+    return <AllClear title={props.title} sub={props.sub} schedule={props.schedule} />;
   return <Run {...props} />;
 }
 
-function AllClear({ title, sub }) {
+function AllClear({ title, sub, schedule }) {
   return (
     <div className="idle-root">
-      <Header title={title} sub={sub} />
+      <Header title={title} sub={sub} schedule={schedule} />
       <div className="boot">
         <span className="sys-ok">
           <span className="ok-dot" aria-hidden="true" />
@@ -83,7 +84,7 @@ function AllClear({ title, sub }) {
   );
 }
 
-function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl, storageKey }) {
+function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl, storageKey, schedule }) {
   const { answerById, matchAnswers } = useMemo(() => buildMatcher(answers), [answers]);
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
@@ -295,6 +296,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       <Header
         title={title}
         sub={sub}
+        schedule={schedule}
         onHelpDismiss={() => setTimeout(focusInput, 0)} // hand focus back to the input the modal was covering
         onOverlayChange={setOverlayUp}
         right={

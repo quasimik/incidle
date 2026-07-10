@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { HOURS } from "./rules.js";
 import { Link } from "./router.jsx";
+import StatsModal from "./Stats.jsx";
 
-// Shared page bar: ☰ menu (plus the help/about modals it opens), brand link,
-// optional sub label, and page-specific controls on the right. Every screen
-// renders this so the nav is identical everywhere.
-export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, onOverlayChange }) {
+// Shared page bar: ☰ menu (plus the stats/help/about modals it opens), brand
+// link, optional sub label, and page-specific controls on the right. Every
+// screen renders this so the nav is identical everywhere. schedule (the day
+// numbers with an incident) feeds the stats modal's streak math.
+export default function Header({ title = "INCIDLE", sub, right, schedule = [], onHelpDismiss, onOverlayChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // The how-to-play opens itself once on first visit, then remembers it was
   // seen. Guarded so a blocked localStorage (private mode) just shows the intro.
@@ -14,6 +16,7 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
     catch { return true; }
   });
   const [showAbout, setShowAbout] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const menuRef = useRef(null);
 
   // menu: close on any outside press or Escape
@@ -53,8 +56,8 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
 
   // tell the page a modal is covering it (Game pauses its Enter capture)
   useEffect(() => {
-    onOverlayChange?.(showHelp || showAbout);
-  }, [showHelp, showAbout]);
+    onOverlayChange?.(showHelp || showAbout || showStats);
+  }, [showHelp, showAbout, showStats]);
 
   return (
     <>
@@ -75,6 +78,15 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
                 <Link className="menu-item" href="/archive" onClick={() => setMenuOpen(false)}>
                   past incidents
                 </Link>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowStats(true);
+                  }}
+                >
+                  stats
+                </button>
                 <button
                   className="menu-item"
                   onClick={() => {
@@ -143,6 +155,8 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
           </div>
         </div>
       )}
+
+      {showStats && <StatsModal schedule={schedule} onClose={() => setShowStats(false)} />}
 
       {showAbout && (
         <div className="modal-scrim" onClick={() => setShowAbout(false)}>

@@ -18,6 +18,21 @@ export function saveRun(key, run) {
   } catch {}
 }
 
+// Every daily run on this device, oldest first — the raw material for the
+// personal stats (stats.js).
+export function listDailyRuns() {
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const m = localStorage.key(i)?.match(/^incidle:run:(\d+)$/);
+      if (!m) continue;
+      const run = loadRun(m[1]);
+      if (run) out.push({ num: Number(m[1]), run });
+    }
+  } catch {}
+  return out.sort((a, b) => a.num - b.num);
+}
+
 // Custom incidents only exist locally as runs — starting one is what puts it
 // in your archive. Newest first; runs predating the t field sort last.
 export function listCustomRuns() {

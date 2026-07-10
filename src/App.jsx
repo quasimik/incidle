@@ -52,10 +52,14 @@ function App({ answers, incidents }) {
   const route = useRoute();
   const today = toDateStr(new Date());
   const todayNum = Math.max(0, dayNumber(today));
+  // the day numbers that actually have an incident — the stats modal's
+  // streak math walks this, so unscheduled days can't break a streak
+  const schedule = incidents.map((inc) => inc.num).filter((n) => Number.isInteger(n));
 
   if (route.view === "archive")
-    return <Archive today={today} dailyCount={incidents.length} />;
-  if (route.view === "custom") return <CustomGame answers={answers} id={route.id} />;
+    return <Archive today={today} dailyCount={incidents.length} schedule={schedule} />;
+  if (route.view === "custom")
+    return <CustomGame answers={answers} id={route.id} schedule={schedule} />;
 
   const n = route.view === "day" ? route.num - 1 : todayNum;
   if (n < 0 || n > todayNum) return <RedirectHome />;
@@ -73,6 +77,7 @@ function App({ answers, incidents }) {
       sub={n === todayNum ? null : fmtShort(addDays(DAILY_EPOCH, n))}
       shareTag={`incidle #${n + 1}`}
       storageKey={n + 1}
+      schedule={schedule}
     />
   );
 }
@@ -80,7 +85,7 @@ function App({ answers, incidents }) {
 // A custom incident is never in the boot payload (see api/incidents.js), so
 // fetch it by id when its link is opened. A bad or deleted id lands on a
 // dead-end screen rather than a redirect, so the URL stays inspectable.
-function CustomGame({ answers, id }) {
+function CustomGame({ answers, id, schedule }) {
   const [incident, setIncident] = useState(null);
   const [failed, setFailed] = useState(null); // "missing" | "network"
   const [attempt, setAttempt] = useState(0);
@@ -133,6 +138,7 @@ function CustomGame({ answers, id }) {
       shareTag={`incidle ${id}`}
       shareUrl={`https://incidle.com/a/${id}`}
       storageKey={id}
+      schedule={schedule}
     />
   );
 }

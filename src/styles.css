@@ -183,6 +183,36 @@ a.brand:hover { color: var(--cyan); }
 .hl-green { color: var(--green); }
 .modal-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
 
+/* stats modal — headline tiles over a Wordle-style solve-hour histogram */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-bottom: 22px; text-align: center;
+}
+.stat-num { font-size: 26px; font-weight: 600; line-height: 1.2; }
+.stat-unit { font-size: 14px; font-weight: 400; color: var(--muted); }
+.stat-cap { font-size: 11px; color: var(--muted); letter-spacing: .05em; }
+.dist-head {
+  font-size: 11px; font-weight: 600; letter-spacing: .14em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.dist-label {
+  flex: none; width: 32px; text-align: right;
+  font-size: 12px; color: var(--muted);
+}
+.dist-track { flex: 1; min-width: 0; }
+.dist-bar {
+  width: 24px; box-sizing: border-box; padding: 2px 7px; border-radius: 3px;
+  background: var(--line); color: var(--text);
+  font-size: 12px; line-height: 1.4; text-align: right;
+}
+.dist-bar-zero { background: none; border: 1px solid var(--line); color: var(--muted); }
+.dist-bar-esc { background: rgba(255,107,107,.22); }
+/* the bucket today's run landed in */
+.dist-bar-today { background: var(--green); color: var(--bg); font-weight: 600; }
+.dist-bar-esc.dist-bar-today { background: var(--red); }
+.stat-specials { margin-top: 16px; font-size: 12px; color: var(--muted); }
+
 .about { max-width: 300px; text-align: center; padding: 30px 22px 28px; }
 .about-spark { font-size: 26px; margin-bottom: 12px; }
 .about-line {
