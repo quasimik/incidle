@@ -242,9 +242,10 @@ a.brand:hover { color: var(--cyan); }
 .about { max-width: 300px; text-align: center; padding: 30px 22px 28px; }
 .about-spark { font-size: 26px; margin-bottom: 12px; }
 .about-line {
-  margin: 0 0 8px; font-size: 14px; line-height: 1.5;
+  margin: 0; font-size: 14px; line-height: 1.5;
   font-family: 'Inter', system-ui, sans-serif; color: var(--text);
 }
+.about-line:last-of-type { margin-bottom: 8px; }
 .about-link { font-size: 13px; color: var(--cyan); text-decoration: none; }
 .about-link:hover { text-decoration: underline; }
 
