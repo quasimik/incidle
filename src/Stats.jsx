@@ -1,6 +1,10 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { HOURS } from "./rules.js";
 import { computeStats } from "./stats.js";
+import { seedRuns, clearRuns } from "./seed.js";
+
+// dev tools only exist off production — previews and localhost
+const DEV = typeof window !== "undefined" && window.location.hostname !== "incidle.com";
 
 const fmt = (n) => (Math.round(n * 10) / 10).toString();
 
@@ -10,7 +14,8 @@ const fmt = (n) => (Math.round(n * 10) / 10).toString();
 // squares per finished daily. All three speak the pip/share color language:
 // blue investigated, red guessed wrong, green solved.
 export default function StatsModal({ onClose }) {
-  const s = useMemo(() => computeStats(), []);
+  const [rev, setRev] = useState(0); // bumped by the dev tools to recompute
+  const s = useMemo(() => computeStats(), [rev]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -112,6 +117,18 @@ export default function StatsModal({ onClose }) {
         {s.customs > 0 && (
           <div className="stat-specials">
             specials: {s.customsSolved}/{s.customs} solved
+          </div>
+        )}
+
+        {DEV && (
+          <div className="stat-dev">
+            <span className="stat-dev-tag">dev</span>
+            <button className="btn btn-ghost" onClick={() => { seedRuns(); setRev(rev + 1); }}>
+              seed fake runs
+            </button>
+            <button className="btn btn-ghost" onClick={() => { clearRuns(); setRev(rev + 1); }}>
+              clear all runs
+            </button>
           </div>
         )}
       </div>

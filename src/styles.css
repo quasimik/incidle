@@ -219,6 +219,12 @@ a.brand:hover { color: var(--cyan); }
 .wf-wrong, .wf-near { background: var(--red); border-color: var(--red); }
 .wf-solve { background: var(--green); border-color: var(--green); }
 .stat-specials { margin-top: 16px; font-size: 12px; color: var(--muted); }
+/* preview/localhost-only tools (see DEV in Stats.jsx) */
+.stat-dev {
+  display: flex; align-items: center; gap: 8px; margin-top: 20px;
+  padding-top: 14px; border-top: 1px dashed var(--line);
+}
+.stat-dev-tag { font-size: 11px; letter-spacing: .14em; color: var(--muted); }
 
 .about { max-width: 300px; text-align: center; padding: 30px 22px 28px; }
 .about-spark { font-size: 26px; margin-bottom: 12px; }
