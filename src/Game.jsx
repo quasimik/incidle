@@ -35,8 +35,7 @@ async function postGuess(body) {
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
 // handleGuess. "obs" consumes the next clue, "near"/"wrong" the next saved
 // guess id; the resolve/escalate lines name the answer from the run's stored
-// reveal. Runs from before verdicts moved server-side save near guesses as
-// "wrong" (renders as a plain reject) and no reveal (backfilled on load).
+// reveal (the rare finished run without one renders "…" and no postmortem).
 function rebuildFeed(inc, run, answerById) {
   const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
   const revealName = answerById[run.r?.answerId]?.name ?? "…";
@@ -125,25 +124,6 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       ...(reveal && { r: reveal }),
     });
   }, [storageKey, status, actions, guessedIds, startedAt, reveal]);
-
-  // Runs finished before verdicts moved server-side carry no reveal; fetch it
-  // once so the resolve/escalate lines and the postmortem can render (the
-  // save effect above then persists it, healing the stored run).
-  useEffect(() => {
-    if (!saved || saved.r || saved.s === "active") return;
-    let cancelled = false;
-    postGuess({ key: storageKey, hour: HOURS })
-      .then((r) => {
-        if (cancelled) return;
-        const rev = { answerId: r.answerId, postmortem: r.postmortem };
-        setReveal(rev);
-        setFeed(rebuildFeed(c, { ...saved, r: rev }, answerById));
-      })
-      .catch(() => {}); // the postmortem panel degrades gracefully without it
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });

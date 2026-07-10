@@ -7,8 +7,7 @@ import { HOURS } from "../src/rules.js";
 // own guesses: every guess lands here, and the reveal ({ answerId,
 // postmortem }) ships only when the run ends — a correct guess, or any
 // request marked with the budget's last hour. guessId null asks for the
-// reveal alone (an investigate burning the final hour, or backfilling a run
-// finished before this endpoint existed).
+// reveal alone (an investigate burning the final hour).
 //
 // key addresses the incident the same way run storage does: a daily's num or
 // a custom's ic_ id. This is anti-spoiler, not anti-cheat — anyone can POST
