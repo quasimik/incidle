@@ -249,6 +249,29 @@ a.brand:hover { color: var(--cyan); }
 .about-link { font-size: 13px; color: var(--cyan); text-decoration: none; }
 .about-link:hover { text-decoration: underline; }
 
+/* account modal — google first, the email form under an "or" rule */
+.acct { max-width: 320px; }
+.acct-or {
+  display: flex; align-items: center; gap: 10px; margin: 14px 0;
+  color: var(--muted); font-size: 11.5px; letter-spacing: .08em;
+}
+.acct-or::before, .acct-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.acct-form { display: flex; flex-direction: column; gap: 10px; }
+.acct-input {
+  width: 100%; padding: 11px 13px; border-radius: 7px;
+  background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  font-size: 14px;
+}
+.acct-input::placeholder { color: var(--muted); }
+.acct-err { margin: 10px 0 0; color: var(--red); font-size: 12.5px; }
+.acct-switch { margin: 12px 0 0; text-align: center; color: var(--muted); font-size: 12.5px; }
+.acct-switch-btn {
+  padding: 0; border: 0; background: none;
+  color: var(--cyan); font-size: 12.5px;
+}
+.acct-switch-btn:hover { text-decoration: underline; }
+.acct-user { margin: 0 0 14px; text-align: center; font-size: 14px; overflow-wrap: anywhere; }
+
 .dock {
   display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 28px;
   padding-bottom: max(28px, calc(14px + env(safe-area-inset-bottom)));
@@ -420,7 +443,7 @@ a.brand:hover { color: var(--cyan); }
   .dock-row { flex-wrap: wrap; }
   .combo { flex: 1 1 100%; }
   .action-btn { flex: 1; min-width: 0; }
-  .combo-input { font-size: 16px; } /* <16px triggers iOS focus-zoom */
+  .combo-input, .acct-input { font-size: 16px; } /* <16px triggers iOS focus-zoom */
   .combo-list { max-height: min(300px, 38dvh); } /* stay clear of the keyboard */
   /* one-line suggestion rows: the alias/tag hit gives way (ellipsis) before
      anything wraps; the name and the rejected-note hold their ground */

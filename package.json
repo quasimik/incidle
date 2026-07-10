@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "^1.0.19",
+    "@neondatabase/neon-js": "^0.6.2-beta",
     "@neondatabase/serverless": "^1.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

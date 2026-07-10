@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { HOURS } from "./rules.js";
 import { Link } from "./router.jsx";
 import StatsModal from "./Stats.jsx";
+import AccountModal from "./Account.jsx";
+import { useUser } from "./auth.js";
 
 // Shared page bar: ☰ menu (plus the stats/help/about modals it opens), brand
 // link, optional sub label, and page-specific controls on the right. Every
@@ -16,6 +18,8 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
   });
   const [showAbout, setShowAbout] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [user, refreshUser] = useUser();
   const menuRef = useRef(null);
 
   // menu: close on any outside press or Escape
@@ -55,8 +59,8 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
 
   // tell the page a modal is covering it (Game pauses its Enter capture)
   useEffect(() => {
-    onOverlayChange?.(showHelp || showAbout || showStats);
-  }, [showHelp, showAbout, showStats]);
+    onOverlayChange?.(showHelp || showAbout || showStats || showAccount);
+  }, [showHelp, showAbout, showStats, showAccount]);
 
   return (
     <>
@@ -103,6 +107,15 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
                   }}
                 >
                   about
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowAccount(true);
+                  }}
+                >
+                  {user ? "account" : "sign in"}
                 </button>
               </nav>
             )}
@@ -157,6 +170,14 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
 
       {showStats && <StatsModal onClose={() => setShowStats(false)} />}
 
+      {showAccount && (
+        <AccountModal
+          user={user}
+          onClose={() => setShowAccount(false)}
+          onChange={refreshUser}
+        />
+      )}
+
       {showAbout && (
         <div className="modal-scrim" onClick={() => setShowAbout(false)}>
           <div
@@ -167,7 +188,8 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
             onClick={(e) => e.stopPropagation()}
           >
             <div className="about-spark">✨</div>
-            <p className="about-line">made in san francisco by michael</p>
+            <p className="about-line">made by michael</p>
+            <p className="about-line">in san francisco</p>
             <a className="about-link" href="https://mic.hael.me" target="_blank" rel="noopener noreferrer">
               mic.hael.me
             </a>
