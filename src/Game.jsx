@@ -307,9 +307,8 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   }
 
   const done = status !== "active";
-  // one action button: investigate on empty field, guess otherwise
-  const investigateMode = query.trim() === "";
-  const enterInvestigates = inputFocused && investigateMode && revealed < maxClues;
+  // the button only investigates — guesses submit by picking a suggestion
+  const enterInvestigates = inputFocused && query.trim() === "" && revealed < maxClues;
 
   return (
     <div className="idle-root">
@@ -464,17 +463,13 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
                 </ul>
               )}
             </div>
+            <span className="dock-or" aria-hidden="true">or</span>
             <button
-              className={`btn action-btn ${investigateMode ? "btn-secondary" : "btn-primary"} ${enterInvestigates ? "btn-armed" : ""}`}
-              onClick={() => (investigateMode ? handleInvestigate() : suggestions.length > 0 && pick(suggestions[sel].a))}
-              disabled={
-                busy ||
-                (investigateMode
-                  ? revealed >= maxClues
-                  : suggestions.length === 0 || guessedIds.includes(suggestions[sel].a.id))
-              }
+              className={`btn action-btn btn-secondary ${enterInvestigates ? "btn-armed" : ""}`}
+              onClick={handleInvestigate}
+              disabled={busy || revealed >= maxClues}
             >
-              {investigateMode ? "investigate" : "root-cause"}
+              investigate
               {CAN_HOVER && enterInvestigates ? (
                 <kbd className="key">↵</kbd>
               ) : (

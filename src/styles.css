@@ -210,6 +210,12 @@ a.brand:hover { color: var(--cyan); }
 .action-btn {
   min-width: 152px; display: flex; align-items: center; justify-content: center; gap: 8px;
 }
+/* "guess or investigate" — centers against the input on desktop; on mobile the
+   row wraps (see below) and it shares the second line with the button */
+.dock-or {
+  align-self: center; margin: 0 8px; color: var(--muted); font-size: 11.5px;
+  letter-spacing: .08em; user-select: none;
+}
 .action-btn .dot { opacity: .5; }
 .combo { position: relative; flex: 1; }
 .combo-input {
@@ -353,7 +359,7 @@ a.brand:hover { color: var(--cyan); }
     padding-bottom: max(16px, calc(10px + env(safe-area-inset-bottom)));
   }
   .dock-row { gap: 8px; }
-  /* input on its own row, action button full-width beneath it */
+  /* input on its own row; "or" + action button share the line beneath it */
   .dock-row { flex-wrap: wrap; }
   .combo { flex: 1 1 100%; }
   .action-btn { flex: 1; min-width: 0; }
