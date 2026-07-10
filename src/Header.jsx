@@ -5,9 +5,8 @@ import StatsModal from "./Stats.jsx";
 
 // Shared page bar: ☰ menu (plus the stats/help/about modals it opens), brand
 // link, optional sub label, and page-specific controls on the right. Every
-// screen renders this so the nav is identical everywhere. schedule (the day
-// numbers with an incident) feeds the stats modal's streak math.
-export default function Header({ title = "INCIDLE", sub, right, schedule = [], onHelpDismiss, onOverlayChange }) {
+// screen renders this so the nav is identical everywhere.
+export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, onOverlayChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // The how-to-play opens itself once on first visit, then remembers it was
   // seen. Guarded so a blocked localStorage (private mode) just shows the intro.
@@ -156,7 +155,7 @@ export default function Header({ title = "INCIDLE", sub, right, schedule = [], o
         </div>
       )}
 
-      {showStats && <StatsModal schedule={schedule} onClose={() => setShowStats(false)} />}
+      {showStats && <StatsModal onClose={() => setShowStats(false)} />}
 
       {showAbout && (
         <div className="modal-scrim" onClick={() => setShowAbout(false)}>

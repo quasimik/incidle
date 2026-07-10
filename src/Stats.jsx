@@ -1,11 +1,16 @@
 import { useMemo, useEffect } from "react";
+import { HOURS } from "./rules.js";
 import { computeStats } from "./stats.js";
 
-// Personal stats modal (menu → stats): headline tiles plus a Wordle-style
-// solve-hour histogram. Everything is read from this device's localStorage
-// when the modal opens — see stats.js.
-export default function StatsModal({ schedule, onClose }) {
-  const s = useMemo(() => computeStats(schedule), [schedule]);
+const fmt = (n) => (Math.round(n * 10) / 10).toString();
+
+// Personal stats modal (menu → stats), read from this device's localStorage
+// when it opens — see stats.js. Headline tiles, then an hour-by-hour stack of
+// every finished run's actions, then the waterfall: one share-style row of
+// squares per finished daily. All three speak the pip/share color language:
+// blue investigated, red guessed wrong, green solved.
+export default function StatsModal({ onClose }) {
+  const s = useMemo(() => computeStats(), []);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -13,19 +18,16 @@ export default function StatsModal({ schedule, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const rate = s.played > 0 ? Math.round((100 * s.solved) / s.played) : null;
-  const peak = Math.max(1, ...s.dist, s.escalated);
-
-  const bar = (count, hot, cls = "") => (
-    <div className="dist-track">
-      <div
-        className={`dist-bar ${cls} ${count === 0 ? "dist-bar-zero" : ""} ${hot ? "dist-bar-today" : ""}`}
-        style={count > 0 ? { width: `${Math.max(9, (100 * count) / peak)}%` } : undefined}
-      >
-        {count}
-      </div>
-    </div>
-  );
+  // segment widths are shares of all finished runs (unnormalized: columns
+  // thin out as runs end early, which is itself the story)
+  const seg = (count, cls, label) =>
+    count > 0 && (
+      <span
+        className={`hourly-seg ${cls}`}
+        style={{ width: `${(100 * count) / s.played}%` }}
+        title={`${count} ${label}`}
+      />
+    );
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -43,30 +45,69 @@ export default function StatsModal({ schedule, onClose }) {
             <div className="stat-cap">triaged</div>
           </div>
           <div className="stat-cell">
-            <div className="stat-num">{rate ?? "–"}{rate != null && <span className="stat-unit">%</span>}</div>
+            <div className="stat-num">
+              {s.played > 0 ? (
+                <>{Math.round((100 * s.solved) / s.played)}<span className="stat-unit">%</span></>
+              ) : "–"}
+            </div>
             <div className="stat-cap">solve rate</div>
           </div>
           <div className="stat-cell">
-            <div className="stat-num">{s.currentStreak}</div>
-            <div className="stat-cap">streak</div>
+            <div className="stat-num">
+              {s.solveTime != null ? (
+                <><span className="stat-unit">T+</span>{fmt(s.solveTime)}</>
+              ) : "–"}
+            </div>
+            <div className="stat-cap">solve time</div>
           </div>
           <div className="stat-cell">
-            <div className="stat-num">{s.maxStreak}</div>
-            <div className="stat-cap">max streak</div>
+            <div className="stat-num">{s.clues != null ? fmt(s.clues) : "–"}</div>
+            <div className="stat-cap">clues</div>
+          </div>
+          <div className="stat-cell">
+            <div className="stat-num">{s.guesses != null ? fmt(s.guesses) : "–"}</div>
+            <div className="stat-cap">guesses</div>
           </div>
         </div>
+        <div className="stat-note">solve time · clues · guesses average your solved runs</div>
 
-        <div className="dist-head">RESOLVED AT</div>
-        {s.dist.map((n, i) => (
-          <div key={i} className="dist-row">
-            <span className="dist-label">T+{i + 1}</span>
-            {bar(n, s.today === i + 1)}
+        <div className="stat-head">HOUR BY HOUR</div>
+        {s.hours.map((h, i) => (
+          <div key={i} className="hourly-row">
+            <span className="hourly-label">T+{i + 1}</span>
+            <div className="hourly-track">
+              {seg(h.obs, "seg-obs", "investigated")}
+              {seg(h.guess, "seg-guess", "guessed wrong")}
+              {seg(h.solve, "seg-solve", "solved")}
+            </div>
           </div>
         ))}
-        <div className="dist-row">
-          <span className="dist-label">ESC</span>
-          {bar(s.escalated, s.today === "esc", "dist-bar-esc")}
-        </div>
+
+        {s.log.length > 0 && (
+          <>
+            <div className="stat-head stat-head-log">LOG</div>
+            <ul className="wf">
+              {s.log.map(({ num, run }) => (
+                <li
+                  key={num}
+                  className="wf-row"
+                  aria-label={`#${num}: ${
+                    run.s === "solved" ? `resolved at T+${run.a.length}` : "escalated"
+                  }`}
+                >
+                  <span className="wf-id">#{num}</span>
+                  {Array.from({ length: HOURS }, (_, i) => (
+                    <span
+                      key={i}
+                      className={`wf-cell ${run.a[i] ? `wf-${run.a[i]}` : ""}`}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         {s.customs > 0 && (
           <div className="stat-specials">
