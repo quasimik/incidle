@@ -19,13 +19,18 @@ function client() {
   return clientPromise;
 }
 
+// The SDK throws AuthApiError on rejected requests (bad password, wrong
+// credentials) rather than returning { error }, so every call is normalized
+// to the { data, error } shape callers expect — never a rejected promise.
+const norm = (promise) => promise.then((res) => res ?? {}, (e) => ({ error: e }));
+
 export const auth = {
-  getSession: () => client().then((c) => c.getSession()),
-  signInEmail: (opts) => client().then((c) => c.signIn.email(opts)),
-  signUpEmail: (opts) => client().then((c) => c.signUp.email(opts)),
+  getSession: () => norm(client().then((c) => c.getSession())),
+  signInEmail: (opts) => norm(client().then((c) => c.signIn.email(opts))),
+  signUpEmail: (opts) => norm(client().then((c) => c.signUp.email(opts))),
   signInGoogle: (opts) =>
-    client().then((c) => c.signIn.social({ provider: "google", ...opts })),
-  signOut: () => client().then((c) => c.signOut()),
+    norm(client().then((c) => c.signIn.social({ provider: "google", ...opts }))),
+  signOut: () => norm(client().then((c) => c.signOut())),
 };
 
 // undefined while the first getSession is in flight, null when signed out —

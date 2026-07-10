@@ -25,7 +25,7 @@ export default function AccountModal({ user, onClose, onChange }) {
     const { error } = await auth.signInGoogle({ callbackURL: window.location.href });
     // on success the browser is already navigating away
     if (error) {
-      setErr(error.message);
+      setErr(error.message || "sign-in failed — try again");
       setBusy(false);
     }
   }
@@ -44,7 +44,7 @@ export default function AccountModal({ user, onClose, onChange }) {
         : await auth.signInEmail({ email, password });
     setBusy(false);
     if (error) {
-      setErr(error.message);
+      setErr(error.message || "sign-in failed — try again");
       return;
     }
     onChange();
