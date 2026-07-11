@@ -2,12 +2,17 @@ import { neon } from "@neondatabase/serverless";
 import { HOURS } from "../src/rules.js";
 
 // ---------------------------------------------------------------------------
-// Server-side verdicts. The incident payloads no longer carry answerId /
+// Server-side verdicts. The incident payloads no longer carry answerIds /
 // nearIds / postmortem (see api/incidents.js), so the client can't grade its
 // own guesses: every guess lands here, and the reveal ({ answerId,
 // postmortem }) ships only when the run ends — a correct guess, or any
 // request marked with the budget's last hour. guessId null asks for the
 // reveal alone (an investigate burning the final hour).
+//
+// answer_ids is an accept-set: any member solves, for the rare incident whose
+// clues genuinely can't separate two catalog labels. The first element is
+// canonical — it's what the reveal (and thus the postmortem framing and the
+// archive) names, so co-answers earn the solve but the story keeps one voice.
 //
 // key addresses the incident the same way run storage does: a daily's num or
 // a custom's ic_ id. This is anti-spoiler, not anti-cheat — anyone can POST
@@ -24,11 +29,11 @@ export default async function handler(req, res) {
   let rows;
   if (typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key)) {
     rows = await sql`
-      SELECT answer_id AS "answerId", near_ids AS "nearIds", postmortem
+      SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem
       FROM incidents WHERE id = ${key}`;
   } else if (Number.isInteger(key) && key > 0) {
     rows = await sql`
-      SELECT answer_id AS "answerId", near_ids AS "nearIds", postmortem
+      SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem
       FROM incidents WHERE num = ${key}`;
   } else {
     res.status(400).json({ error: "bad key" });
@@ -42,10 +47,10 @@ export default async function handler(req, res) {
   const out = {};
   if (typeof guessId === "string") {
     out.verdict =
-      guessId === inc.answerId ? "solve" : inc.nearIds?.includes(guessId) ? "near" : "wrong";
+      inc.answerIds.includes(guessId) ? "solve" : inc.nearIds?.includes(guessId) ? "near" : "wrong";
   }
   if (out.verdict === "solve" || (Number.isInteger(hour) && hour >= HOURS)) {
-    out.answerId = inc.answerId;
+    out.answerId = inc.answerIds[0];
     out.postmortem = inc.postmortem;
   }
   res.setHeader("Cache-Control", "no-store");
