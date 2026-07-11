@@ -11,12 +11,10 @@ import { HOURS } from "../src/rules.js";
 // The client shows this on the postmortem, after the play ends — solve rate
 // before playing would be Wordle-normal, but "most-suspected culprit" is a
 // hint, so nothing here ships pre-verdict. Shape:
-//   { played, solved, hours: [solves at T+1 … T+HOURS], topWrong: {id, n}|null }
-// topWrong is the most-guessed wrong id (the crowd's favorite red herring);
-// ties break alphabetically so the cached payload is stable. Near misses
-// don't compete — directionally right isn't a herring — so each guess's
-// verdict is recovered by aligning guesses with the wrong/near entries of
-// actions, which the plays log keeps in the same order.
+//   { played, solved, hours: [solves at T+1 … T+HOURS], topIncorrect: [{id, n}] }
+// topIncorrect ranks the most-guessed non-answer ids, up to three — near and
+// wrong both count as incorrect; ties break alphabetically so the cached
+// payload is stable.
 // ---------------------------------------------------------------------------
 export default async function handler(req, res) {
   const key = req.query?.key;
@@ -25,28 +23,27 @@ export default async function handler(req, res) {
     return;
   }
   const sql = neon(process.env.DATABASE_URL);
-  const rows = await sql`SELECT solved, hours, actions, guesses FROM plays WHERE incident_key = ${key}`;
+  const rows = await sql`SELECT solved, hours, guesses FROM plays WHERE incident_key = ${key}`;
 
   const hours = Array.from({ length: HOURS }, () => 0);
-  const wrong = new Map();
+  const incorrect = new Map();
   let solved = 0;
   for (const r of rows) {
     if (r.solved) {
       solved++;
       if (r.hours >= 1 && r.hours <= HOURS) hours[r.hours - 1]++;
     }
-    const verdicts = (r.actions ?? []).filter((a) => a === "wrong" || a === "near");
-    r.guesses.forEach((g, i) => {
-      if (verdicts[i] !== "near") wrong.set(g, (wrong.get(g) ?? 0) + 1);
-    });
+    for (const g of r.guesses) incorrect.set(g, (incorrect.get(g) ?? 0) + 1);
   }
-  const top = [...wrong.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+  const top = [...incorrect.entries()]
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .slice(0, 3);
 
   res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=600");
   res.status(200).json({
     played: rows.length,
     solved,
     hours,
-    topWrong: top ? { id: top[0], n: top[1] } : null,
+    topIncorrect: top.map(([id, n]) => ({ id, n })),
   });
 }

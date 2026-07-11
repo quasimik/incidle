@@ -32,10 +32,11 @@ async function postGuess(body) {
   return r.json();
 }
 
-// "42 responders · 62% resolved · median solve T+4 · most-suspected red
-// herring: cache stampede" — or a first-responder nod when the log holds only
-// this play. Median is over solved plays; the red herring needs 2+ votes so one
-// stray guess doesn't get billed as the crowd's favorite.
+// "42 responders · 62% resolved · median solve T+4 · incorrect: cache
+// stampede 31%, dns failure 17%, thread pool 12%" — or a first-responder nod
+// when the log holds only this play. Median is over solved plays; percentages
+// are shares of responders who guessed that id (near or wrong both count),
+// and an id needs 2+ votes so one stray guess isn't billed as a crowd trend.
 function crowdLine(stats, answerById) {
   if (stats.played === 1) return "you're the first responder on this incident.";
   const parts = [
@@ -48,8 +49,10 @@ function crowdLine(stats, answerById) {
     while (left > 0 && med < stats.hours.length) left -= stats.hours[med++];
     parts.push(`median solve T+${med}`);
   }
-  const herring = stats.topWrong?.n >= 2 && answerById[stats.topWrong.id]?.name;
-  if (herring) parts.push(`most-suspected red herring: ${herring}`);
+  const top = (stats.topIncorrect ?? [])
+    .filter((t) => t.n >= 2 && answerById[t.id]?.name)
+    .map((t) => `${answerById[t.id].name} ${Math.round((100 * t.n) / stats.played)}%`);
+  if (top.length > 0) parts.push(`incorrect: ${top.join(", ")}`);
   return parts.join(" · ");
 }
 
