@@ -132,6 +132,7 @@ a.brand:hover { color: var(--cyan); }
   margin: 0 0 14px; font-size: 13px; color: var(--muted);
   font-family: 'Inter', system-ui, sans-serif;
 }
+.post-stats-you { color: var(--text); } /* a crowd guess this player shares */
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 

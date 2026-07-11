@@ -32,12 +32,14 @@ async function postGuess(body) {
   return r.json();
 }
 
-// "42 responders · 62% resolved · median solve T+4 · incorrect: cache
-// stampede 31%, dns failure 17%, thread pool 12%" — or a first-responder nod
-// when the log holds only this play. Median is over solved plays; percentages
-// are shares of responders who guessed that id (near or wrong both count),
-// and an id needs 2+ votes so one stray guess isn't billed as a crowd trend.
-function crowdLine(stats, answerById) {
+// "42 responders · 62% resolved · median solve T+4", then on its own line
+// "top 3 incorrect guesses: cache stampede 31% (you), dns failure 17%, thread
+// pool 12%" — or a first-responder nod when the log holds only this play.
+// Median is over solved plays; percentages are shares of responders who
+// guessed that id (near or wrong both count), an id needs 2+ votes so one
+// stray guess isn't billed as a crowd trend, and the entries this player also
+// guessed are brightened and marked "(you)".
+function crowdLine(stats, answerById, guessedIds) {
   if (stats.played === 1) return "you're the first responder on this incident.";
   const parts = [
     `${stats.played} responders`,
@@ -51,9 +53,24 @@ function crowdLine(stats, answerById) {
   }
   const top = (stats.topIncorrect ?? [])
     .filter((t) => t.n >= 2 && answerById[t.id]?.name)
-    .map((t) => `${answerById[t.id].name} ${Math.round((100 * t.n) / stats.played)}%`);
-  if (top.length > 0) parts.push(`incorrect: ${top.join(", ")}`);
-  return parts.join(" · ");
+    .map((t) => {
+      const text = `${answerById[t.id].name} ${Math.round((100 * t.n) / stats.played)}%`;
+      return guessedIds.includes(t.id) ? (
+        <span key={t.id} className="post-stats-you">{text} (you)</span>
+      ) : (
+        text
+      );
+    });
+  const line = parts.join(" · ");
+  if (top.length === 0) return line;
+  const label = top.length === 1 ? "top incorrect guess" : `top ${top.length} incorrect guesses`;
+  return (
+    <>
+      {line}
+      <br />
+      {label}: {top.flatMap((t, i) => (i > 0 ? [", ", t] : [t]))}
+    </>
+  );
 }
 
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
@@ -401,7 +418,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               </div>
             )}
             {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
-            {crowd && <p className="post-stats">{crowdLine(crowd, answerById)}</p>}
+            {crowd && <p className="post-stats">{crowdLine(crowd, answerById, guessedIds)}</p>}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
