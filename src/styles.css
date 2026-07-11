@@ -111,23 +111,21 @@ a.brand:hover { color: var(--cyan); }
   margin: 0; line-height: 1.55; font-size: 14px;
   font-family: 'Inter', system-ui, sans-serif; color: var(--text);
 }
-/* observations left on the table when the run ended — collapsed by default
-   so the reveal is opt-in, styled like ghosts of feed clue entries */
-.unseen { margin: 0 0 14px; }
+/* observations skipped when the run ended — sits in the feed between its
+   last entry and the postmortem panel, collapsed so the reveal is opt-in.
+   Items are real clue cards, just faded and with an empty hour column (no
+   hour was spent on them) */
+.unseen { margin: 12px 0 16px; }
 .unseen-summary {
-  cursor: pointer; user-select: none;
+  cursor: pointer; user-select: none; padding: 0 10px;
   font-size: 12.5px; font-weight: 600; letter-spacing: .08em;
   text-transform: uppercase; color: var(--muted);
 }
 .unseen-summary:hover { color: var(--cyan); }
-.unseen-list { margin: 10px 0 0; padding: 0; list-style: none; }
-.unseen-list li {
-  padding: 9px 12px; border-radius: 6px; margin-bottom: 6px;
-  line-height: 1.55; color: var(--muted);
-  background: rgba(107,213,232,.04); border: 1px dashed rgba(107,213,232,.2);
-}
+.unseen-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.unseen-list .entry { opacity: .55; animation: none; }
 /* the crowd's verdict on this incident (GET /api/stats) — one muted line
-   between the postmortem prose and the share buttons */
+   after the postmortem prose */
 .post-stats {
   margin: 0 0 14px; font-size: 13px; color: var(--muted);
   font-family: 'Inter', system-ui, sans-serif;
@@ -147,7 +145,9 @@ a.brand:hover { color: var(--cyan); }
   color: var(--cyan); text-decoration: none; cursor: pointer;
 }
 .credit-link:hover { text-decoration: underline; }
-.post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* share CTA rides the verdict: right under the root-cause callout, above the
+   prose — and above the async crowd line, so it never jumps mid-reach */
+.post-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 
 /* dev/preview-only (never rendered on incidle.com): forget this incident's

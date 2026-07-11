@@ -412,23 +412,28 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
           </div>
         ))}
 
+        {done && revealed < maxClues && (
+          <details className="unseen">
+            <summary className="unseen-summary">
+              {maxClues - revealed} skipped observation{maxClues - revealed === 1 ? "" : "s"}
+            </summary>
+            <ul className="unseen-list">
+              {c.clues.slice(revealed).map((cl, i) => (
+                <li key={i} className="entry entry-clue">
+                  <span className="time" />
+                  <span className="tag tag-clue">SKIPPED</span>
+                  <span className="text">{rich(cl)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         {done && (() => {
           const ans = answerById[reveal?.answerId];
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
-            {revealed < maxClues && (
-              <details className="unseen">
-                <summary className="unseen-summary">
-                  {maxClues - revealed} unrevealed observation{maxClues - revealed === 1 ? "" : "s"}
-                </summary>
-                <ul className="unseen-list">
-                  {c.clues.slice(revealed).map((cl, i) => (
-                    <li key={i}>{rich(cl)}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
             {ans?.description && (
               <div className="callout">
                 <span className="callout-icon">🎯</span>
@@ -436,6 +441,24 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
                 <p className="callout-body">{rich(ans.description)}</p>
               </div>
             )}
+            <div className="post-actions">
+              <button className="btn btn-ghost" onClick={copyShare}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                {copied ? "copied ✓" : "copy"}
+              </button>
+              <button className="btn btn-primary" onClick={shareResult}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                </svg>
+                share
+              </button>
+            </div>
             {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
             {crowd && (() => {
               // this player's verdict per guessed id — guessedIds align with
@@ -482,24 +505,6 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
                 )}
               </p>
             )}
-            <div className="post-actions">
-              <button className="btn btn-ghost" onClick={copyShare}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                {copied ? "copied ✓" : "copy"}
-              </button>
-              <button className="btn btn-primary" onClick={shareResult}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="18" cy="5" r="3" />
-                  <circle cx="6" cy="12" r="3" />
-                  <circle cx="18" cy="19" r="3" />
-                  <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
-                </svg>
-                share
-              </button>
-            </div>
           </div>
           );
         })()}
