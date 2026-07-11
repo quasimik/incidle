@@ -2,9 +2,7 @@ import { useMemo, useEffect, useState } from "react";
 import { HOURS } from "./rules.js";
 import { computeStats } from "./stats.js";
 import { seedRuns, clearRuns } from "./seed.js";
-
-// dev tools only exist off production — previews and localhost
-const DEV = typeof window !== "undefined" && window.location.hostname !== "incidle.com";
+import { DEV } from "./dev.js";
 
 const fmt = (n) => (Math.round(n * 10) / 10).toString();
 

@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
 import { loadRun, saveRun, getPlayerId } from "./runs.js";
+import { DEV } from "./dev.js";
 import Header from "./Header.jsx";
 import { highlight, rich } from "./text.jsx";
 
@@ -9,12 +10,6 @@ import { highlight, rich } from "./text.jsx";
 // popping the on-screen keyboard uninvited costs half the viewport.
 const CAN_HOVER =
   typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
-
-// Dev tooling gate: vite dev and vercel previews, never incidle.com — the
-// run-reset button is for replay-testing, not for players.
-const DEV_TOOLS =
-  import.meta.env.DEV ||
-  (typeof window !== "undefined" && !/(^|\.)incidle\.com$/.test(location.hostname));
 
 const TAG = {
   page: { label: "PAGE", cls: "tag-page" },
@@ -512,7 +507,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
           </div>
           );
         })()}
-        {DEV_TOOLS && hoursUsed > 0 && (
+        {DEV && hoursUsed > 0 && (
           <button className="dev-reset" onClick={resetRun}>
             ⟲ reset this incident (dev)
           </button>
