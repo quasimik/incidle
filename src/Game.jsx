@@ -38,7 +38,7 @@ async function postGuess(body) {
 // credit line; absent for uncredited incidents — and for runs saved before
 // credits existed, which is why the credit render guards on them.
 function toReveal(r) {
-  return { answerId: r.answerId, postmortem: r.postmortem, author: r.author, inspiration: r.inspiration };
+  return { answerIds: r.answerIds, postmortem: r.postmortem, author: r.author, inspiration: r.inspiration };
 }
 
 // "42 responders: 62% resolved · mean solve T+4.3", then on its own line
@@ -81,12 +81,13 @@ function crowdLine(stats, answerById, answerId, mine) {
 }
 
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
-// handleGuess. "obs" consumes the next clue, "near"/"wrong" the next saved
-// guess id; the resolve/escalate lines name the answer from the run's stored
-// reveal (the rare finished run without one renders "…" and no postmortem).
+// handleGuess. "obs" consumes the next clue, "near"/"wrong"/"solve" the next
+// saved guess id — the resolve line names the guess that solved it, which may
+// be an accepted answer other than the best one. The rare finished run
+// without a reveal renders "…" and no postmortem.
 function rebuildFeed(inc, run, answerById) {
   const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
-  const revealName = answerById[run.r?.answerId]?.name ?? "…";
+  const bestName = answerById[run.r?.answerIds?.[0]]?.name ?? "…";
   let clue = 0;
   let gi = 0;
   run.a.forEach((act, i) => {
@@ -94,7 +95,7 @@ function rebuildFeed(inc, run, answerById) {
     if (act === "obs") {
       feed.push({ type: "clue", time, text: inc.clues[clue++] });
     } else if (act === "solve") {
-      feed.push({ type: "resolve", time, text: revealName });
+      feed.push({ type: "resolve", time, text: answerById[run.g[gi++]]?.name ?? bestName });
     } else {
       const id = run.g[gi++];
       const name = answerById[id]?.name ?? id;
@@ -106,7 +107,7 @@ function rebuildFeed(inc, run, answerById) {
     }
   });
   if (run.s === "failed")
-    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${revealName}.` });
+    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${bestName}.` });
   return feed;
 }
 
@@ -133,7 +134,9 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
-  // { answerId, postmortem, author?, inspiration? } — arrives from /api/guess when the run ends
+  // { answerIds, postmortem, author?, inspiration? } — arrives from /api/guess
+  // when the run ends; answerIds is every accepted cause in descending order
+  // of goodness
   const [reveal, setReveal] = useState(() => saved?.r ?? null);
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
@@ -222,7 +225,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setReveal(rev);
     setFeed([
       ...newFeed,
-      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerId]?.name}.` },
+      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerIds[0]]?.name}.` },
     ]);
     setStatus("failed");
   }
@@ -283,6 +286,9 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setSelIdx(0);
     const t = eventTime(hour);
     setActions([...actions, r.verdict]);
+    // every guess lands in g, the solve included — the saved run holds the
+    // full sequence, and rebuildFeed names the solving guess from it
+    setGuessedIds([...guessedIds, ans.id]);
     if (r.verdict === "solve") {
       setReveal(toReveal(r));
       setFeed([...feed, { type: "resolve", time: t, text: `${ans.name}` }]);
@@ -293,7 +299,6 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       r.verdict === "near"
         ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
         : { type: "reject", time: t, text: `${ans.name}` };
-    setGuessedIds([...guessedIds, ans.id]);
     if (hour >= HOURS) finishEscalate([...feed, entry], toReveal(r));
     else setFeed([...feed, entry]);
   }
@@ -430,17 +435,19 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         )}
 
         {done && (() => {
-          const ans = answerById[reveal?.answerId];
+          // every accepted cause, best first — ranking is honest, so the
+          // best answer keeps the target treatment and the rest go quieter
+          const accepted = (reveal?.answerIds ?? []).map((id) => answerById[id]).filter(Boolean);
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
-            {ans?.description && (
-              <div className="callout">
-                <span className="callout-icon">🎯</span>
-                <div className="callout-head">Root cause: {ans.name}</div>
-                <p className="callout-body">{rich(ans.description)}</p>
+            {accepted.map((ans, i) => (
+              <div key={ans.id} className={i === 0 ? "callout" : "callout callout-alt"}>
+                <span className="callout-icon">{i === 0 ? "🎯" : "✅"}</span>
+                <div className="callout-head">{i === 0 ? "Root cause" : "Also accepted"}: {ans.name}</div>
+                {ans.description && <p className="callout-body">{rich(ans.description)}</p>}
               </div>
-            )}
+            ))}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -466,8 +473,10 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               const verdicts = actions.filter((a) => a === "wrong" || a === "near");
               const mine = {};
               guessedIds.forEach((id, i) => { mine[id] = verdicts[i] ?? "wrong"; });
-              if (status === "solved" && reveal?.answerId) mine[reveal.answerId] = "solve";
-              return <p className="post-stats">{crowdLine(crowd, answerById, reveal?.answerId, mine)}</p>;
+              // on a solve, g's last entry is the solving guess (no wrong/near
+              // verdict to pair with) — it may be any accepted member, not [0]
+              if (status === "solved" && guessedIds.length > 0) mine[guessedIds[guessedIds.length - 1]] = "solve";
+              return <p className="post-stats">{crowdLine(crowd, answerById, reveal?.answerIds?.[0], mine)}</p>;
             })()}
             {(reveal?.author || reveal?.inspiration) && (
               <p className="post-credit">

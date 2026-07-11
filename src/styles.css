@@ -111,6 +111,9 @@ a.brand:hover { color: var(--cyan); }
   margin: 0; line-height: 1.55; font-size: 14px;
   font-family: 'Inter', system-ui, sans-serif; color: var(--text);
 }
+/* lower-ranked accepted answers: same shape as the best one, quieter voice */
+.callout-alt { border-color: rgba(107,213,232,.14); border-left-color: rgba(107,213,232,.45); }
+.callout-alt .callout-head { color: var(--muted); }
 /* observations skipped when the run ended — sits in the feed between its
    last entry and the postmortem panel, collapsed so the reveal is opt-in.
    Items are real clue cards, just faded and with an empty hour column (no

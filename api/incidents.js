@@ -13,7 +13,7 @@ import { neon } from "@neondatabase/serverless";
 // never ride along here — this payload goes to every visitor at boot, and
 // shipping them would let anyone enumerate every secret incident.
 //
-// Answer-derived fields (answer_id, near_ids, postmortem) deliberately don't
+// Answer-derived fields (answer_ids, near_ids, postmortem) deliberately don't
 // ship either: the client grades guesses through POST /api/guess, which
 // reveals the postmortem only once a run ends. Keep them out of every
 // row-shaped payload.

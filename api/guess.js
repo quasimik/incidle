@@ -2,14 +2,20 @@ import { neon } from "@neondatabase/serverless";
 import { HOURS } from "../src/rules.js";
 
 // ---------------------------------------------------------------------------
-// Server-side verdicts. The incident payloads no longer carry answerId /
+// Server-side verdicts. The incident payloads no longer carry answerIds /
 // nearIds / postmortem (see api/incidents.js), so the client can't grade its
-// own guesses: every guess lands here, and the reveal ({ answerId,
+// own guesses: every guess lands here, and the reveal ({ answerIds,
 // postmortem, author?, inspiration? }) ships only when the run ends — a
 // solve, or any request marked with the budget's last hour. guessId null
 // asks for the reveal alone (an investigate burning the final hour). The
 // credits ride the reveal rather than the incident payload because the
 // inspiration names the real-world outage — a giveaway pre-verdict.
+//
+// answer_ids is an accept-set in descending order of goodness: any member
+// solves, and the reveal ships the whole ranked list — the client shows every
+// accepted cause, headlining answer_ids[0] as the best one. Ranking and the
+// answer-vs-near threshold are post-hoc authoring judgments, not part of the
+// story's telling.
 //
 // key addresses the incident the same way run storage does: a daily's num or
 // a custom's ic_ id. This is anti-spoiler, not anti-cheat — anyone can POST
@@ -50,11 +56,11 @@ export default async function handler(req, res) {
   let rows;
   if (typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key)) {
     rows = await sql`
-      SELECT answer_id AS "answerId", near_ids AS "nearIds", postmortem, author, inspiration
+      SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
       FROM incidents WHERE id = ${key}`;
   } else if (Number.isInteger(key) && key > 0) {
     rows = await sql`
-      SELECT answer_id AS "answerId", near_ids AS "nearIds", postmortem, author, inspiration
+      SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
       FROM incidents WHERE num = ${key}`;
   } else {
     res.status(400).json({ error: "bad key" });
@@ -68,10 +74,10 @@ export default async function handler(req, res) {
   const out = {};
   if (typeof guessId === "string") {
     out.verdict =
-      guessId === inc.answerId ? "solve" : inc.nearIds?.includes(guessId) ? "near" : "wrong";
+      inc.answerIds.includes(guessId) ? "solve" : inc.nearIds?.includes(guessId) ? "near" : "wrong";
   }
   if (out.verdict === "solve" || (Number.isInteger(hour) && hour >= HOURS)) {
-    out.answerId = inc.answerId;
+    out.answerIds = inc.answerIds;
     out.postmortem = inc.postmortem;
     if (inc.author) out.author = inc.author;
     if (inc.inspiration) out.inspiration = inc.inspiration;
