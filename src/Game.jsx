@@ -44,13 +44,13 @@ function toReveal(r) {
 // "42 responders: 62% resolved · mean solve T+4.3", then on its own line
 // "top guesses: connection pool exhaustion 62% · cache stampede 31% · dns
 // failure 17%" — or a first-responder nod when the log holds only this play.
-// Mean is over solved plays. The top list ranks the crowd's incorrect
-// guesses (near and wrong both count) against the answer itself, whose count
-// is the solves; percentages are shares of responders, an id needs 2+ votes
+// Mean is over solved plays. The top list ranks every guessed id — correct
+// ones included, each accepted member under its own name (api/stats.js does
+// the counting); percentages are shares of responders, an id needs 2+ votes
 // so one stray guess isn't billed as a crowd trend, and entries this player
 // also guessed take their color from the player's own verdict on them —
 // red wrong, amber near, green solve (mine maps guessed id → verdict).
-function crowdLine(stats, answerById, answerId, mine) {
+function crowdLine(stats, answerById, mine) {
   if (stats.played === 1) return "you're the first responder on this incident.";
   const parts = [`${Math.round((stats.solved / stats.played) * 100)}% resolved`];
   if (stats.solved > 0) {
@@ -58,10 +58,7 @@ function crowdLine(stats, answerById, answerId, mine) {
     const spent = stats.hours.reduce((sum, n, i) => sum + n * (i + 1), 0);
     parts.push(`mean solve T+${(spent / stats.solved).toFixed(1)}`);
   }
-  const ranked = [...(stats.topIncorrect ?? [])];
-  if (stats.solved > 0 && answerId) ranked.push({ id: answerId, n: stats.solved });
-  const top = ranked
-    .sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1))
+  const top = (stats.top ?? [])
     .filter((t) => t.n >= 2 && answerById[t.id]?.name)
     .slice(0, 3)
     .map((t) => {
@@ -476,7 +473,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               // on a solve, g's last entry is the solving guess (no wrong/near
               // verdict to pair with) — it may be any accepted member, not [0]
               if (status === "solved" && guessedIds.length > 0) mine[guessedIds[guessedIds.length - 1]] = "solve";
-              return <p className="post-stats">{crowdLine(crowd, answerById, reveal?.answerIds?.[0], mine)}</p>;
+              return <p className="post-stats">{crowdLine(crowd, answerById, mine)}</p>;
             })()}
             {(reveal?.author || reveal?.inspiration) && (
               <p className="post-credit">

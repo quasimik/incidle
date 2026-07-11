@@ -34,6 +34,9 @@ import { HOURS } from "../src/rules.js";
 // (explore-vs-exploit slicing like the personal ones). Same trust stance as
 // the verdicts — fake plays are POSTable, and at this scale that's fine.
 // Logging is best-effort: the reveal must ship even if the insert fails.
+// The solving guess is logged like any other: with accept-sets it isn't
+// derivable from solved alone, and the crowd line counts each accepted
+// member under its own name (api/stats.js).
 //
 //   CREATE TABLE plays (
 //     incident_key text NOT NULL,   -- '3' or 'ic_...'
@@ -41,7 +44,7 @@ import { HOURS } from "../src/rules.js";
 //     solved boolean NOT NULL,
 //     hours int NOT NULL,           -- the hour the play ended, 1..HOURS
 //     actions text[] NOT NULL,      -- "obs"|"wrong"|"near"|"solve", one per hour
-//     guesses text[] NOT NULL,      -- wrong + near ids, in order
+//     guesses text[] NOT NULL,      -- every guessed id, in order (solve last)
 //     created_at timestamptz DEFAULT now(),
 //     PRIMARY KEY (incident_key, player)
 //   );
@@ -90,8 +93,7 @@ export default async function handler(req, res) {
     ) {
       const isId = (g) => typeof g === "string" && /^[a-z0-9_]{1,64}$/.test(g);
       const prior = Array.isArray(guesses) ? guesses.filter(isId).slice(0, HOURS) : [];
-      const all =
-        out.verdict && out.verdict !== "solve" && isId(guessId) ? [...prior, guessId] : prior;
+      const all = out.verdict && isId(guessId) ? [...prior, guessId] : prior;
       // a prior hour can't hold a solve; this request's move ends the play
       const isAct = (a) => a === "obs" || a === "wrong" || a === "near";
       const seq = [
