@@ -35,12 +35,11 @@ async function postGuess(body) {
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
 // handleGuess. "obs" consumes the next clue, "near"/"wrong"/"solve" the next
 // saved guess id — the resolve line names the guess that solved it, which may
-// be an accepted answer other than the best one. Runs saved before solves
-// were recorded in g (and the rare finished run without a reveal) fall back
-// to the reveal's best answer, or "…".
+// be an accepted answer other than the best one. The rare finished run
+// without a reveal renders "…" and no postmortem.
 function rebuildFeed(inc, run, answerById) {
   const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
-  const bestName = answerById[(run.r?.answerIds ?? [run.r?.answerId])[0]]?.name ?? "…";
+  const bestName = answerById[run.r?.answerIds?.[0]]?.name ?? "…";
   let clue = 0;
   let gi = 0;
   run.a.forEach((act, i) => {
@@ -87,14 +86,9 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
-  // { answerIds, postmortem } — arrives from /api/guess when the run ends.
-  // answerIds is every accepted cause in descending order of goodness; runs
-  // saved before accept-sets stored a scalar answerId and are normalized here.
-  const [reveal, setReveal] = useState(() => {
-    const r = saved?.r;
-    if (!r) return null;
-    return r.answerIds ? r : { ...r, answerIds: [r.answerId] };
-  });
+  // { answerIds, postmortem } — arrives from /api/guess when the run ends;
+  // answerIds is every accepted cause in descending order of goodness
+  const [reveal, setReveal] = useState(() => saved?.r ?? null);
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
   );
