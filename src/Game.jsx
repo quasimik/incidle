@@ -213,7 +213,13 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setNetFail(false);
     setBusy(true);
     try {
-      const r = await postGuess({ key: storageKey, hour, player: getPlayerId(), guesses: guessedIds });
+      const r = await postGuess({
+        key: storageKey,
+        hour,
+        player: getPlayerId(),
+        actions,
+        guesses: guessedIds,
+      });
       setActions([...actions, "obs"]);
       finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
     } catch {
@@ -235,6 +241,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         guessId: ans.id,
         hour,
         player: getPlayerId(),
+        actions,
         guesses: guessedIds,
       });
     } catch {

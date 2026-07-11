@@ -19,17 +19,20 @@ import { HOURS } from "../src/rules.js";
 // browser's persistent pl_ id (runs.js). ON CONFLICT DO NOTHING both dedupes
 // retries/reloads and means the first finished play wins — a replay that
 // still holds the id can't overwrite the honest attempt. Accounts will widen
-// player to a user id, collapsing one person's devices. guesses is the
-// client's prior wrong/near ids, with this request's guess appended
-// server-side when it isn't the solve. Same trust stance as the verdicts —
-// fake plays are POSTable, and at this scale that's fine. Logging is
-// best-effort: the reveal must ship even if the insert fails.
+// player to a user id, collapsing one person's devices. actions and guesses
+// arrive as the client's prior hour-by-hour moves and wrong/near ids, and
+// the ending move/guess is appended server-side — so the row holds the
+// play's complete sequence, info steps included, for stats not yet designed
+// (explore-vs-exploit slicing like the personal ones). Same trust stance as
+// the verdicts — fake plays are POSTable, and at this scale that's fine.
+// Logging is best-effort: the reveal must ship even if the insert fails.
 //
 //   CREATE TABLE plays (
 //     incident_key text NOT NULL,   -- '3' or 'ic_...'
 //     player text NOT NULL,         -- pl_<10 lowercase base36>; user id later
 //     solved boolean NOT NULL,
 //     hours int NOT NULL,           -- the hour the play ended, 1..HOURS
+//     actions text[] NOT NULL,      -- "obs"|"wrong"|"near"|"solve", one per hour
 //     guesses text[] NOT NULL,      -- wrong + near ids, in order
 //     created_at timestamptz DEFAULT now(),
 //     PRIMARY KEY (incident_key, player)
@@ -40,7 +43,7 @@ export default async function handler(req, res) {
     res.status(405).json({ error: "method not allowed" });
     return;
   }
-  const { key, guessId, hour, player, guesses } = req.body ?? {};
+  const { key, guessId, hour, player, actions, guesses } = req.body ?? {};
   const sql = neon(process.env.DATABASE_URL);
   let rows;
   if (typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key)) {
@@ -79,10 +82,16 @@ export default async function handler(req, res) {
       const prior = Array.isArray(guesses) ? guesses.filter(isId).slice(0, HOURS) : [];
       const all =
         out.verdict && out.verdict !== "solve" && isId(guessId) ? [...prior, guessId] : prior;
+      // a prior hour can't hold a solve; this request's move ends the play
+      const isAct = (a) => a === "obs" || a === "wrong" || a === "near";
+      const seq = [
+        ...(Array.isArray(actions) ? actions.filter(isAct).slice(0, HOURS - 1) : []),
+        out.verdict ?? "obs",
+      ];
       try {
         await sql`
-          INSERT INTO plays (incident_key, player, solved, hours, guesses)
-          VALUES (${String(key)}, ${player}, ${out.verdict === "solve"}, ${hour}, ${all})
+          INSERT INTO plays (incident_key, player, solved, hours, actions, guesses)
+          VALUES (${String(key)}, ${player}, ${out.verdict === "solve"}, ${hour}, ${seq}, ${all})
           ON CONFLICT DO NOTHING`;
       } catch {}
     }
