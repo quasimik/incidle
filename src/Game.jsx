@@ -10,6 +10,12 @@ import { highlight, rich } from "./text.jsx";
 const CAN_HOVER =
   typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
 
+// Dev tooling gate: vite dev and vercel previews, never incidle.com — the
+// run-reset button is for replay-testing, not for players.
+const DEV_TOOLS =
+  import.meta.env.DEV ||
+  (typeof window !== "undefined" && !/(^|\.)incidle\.com$/.test(location.hostname));
+
 const TAG = {
   page: { label: "PAGE", cls: "tag-page" },
   clue: { label: "OBSERVED", cls: "tag-clue" },
@@ -363,6 +369,16 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     }
   }
 
+  // dev/preview-only: forget this incident's saved run and start over. Local
+  // state only — the server's plays row (keyed on incident+player) survives,
+  // so replays never re-count in the crowd stats.
+  function resetRun() {
+    try {
+      localStorage.removeItem(`incidle:run:${storageKey}`);
+    } catch {}
+    location.reload();
+  }
+
   const done = status !== "active";
   // the button only investigates — guesses submit by picking a suggestion
   const enterInvestigates = inputFocused && query.trim() === "" && revealed < maxClues;
@@ -496,6 +512,11 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
           </div>
           );
         })()}
+        {DEV_TOOLS && hoursUsed > 0 && (
+          <button className="dev-reset" onClick={resetRun}>
+            ⟲ reset this incident (dev)
+          </button>
+        )}
         <div ref={feedEndRef} />
       </main>
 

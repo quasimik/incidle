@@ -150,6 +150,15 @@ a.brand:hover { color: var(--cyan); }
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 
+/* dev/preview-only (never rendered on incidle.com): forget this incident's
+   saved run and replay it — sits at the tail of the feed */
+.dev-reset {
+  display: block; margin: 10px 0 0; padding: 3px 9px;
+  background: none; border: 1px dashed var(--line); border-radius: 6px;
+  color: var(--muted); font-size: 11.5px;
+}
+.dev-reset:hover { color: var(--cyan); border-color: var(--cyan); }
+
 .modal-scrim {
   position: fixed; inset: 0; z-index: 50; padding: 20px;
   display: flex; align-items: center; justify-content: center;
