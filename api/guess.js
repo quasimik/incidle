@@ -14,30 +14,33 @@ import { HOURS } from "../src/rules.js";
 // hour=HOURS and read the answer; the point is that idle clients and the
 // network tab never see it.
 //
-// A request that ends the run also logs the play to the plays table (the raw
-// material for GET /api/stats): playId is minted by the client when the play
-// starts, so ON CONFLICT DO NOTHING dedupes retries and reloads; guesses is
-// the client's prior wrong/near ids, with this request's guess appended
+// A request that ends the run also logs the play (the raw material for
+// GET /api/stats): one row per (incident, player), where player is the
+// browser's persistent pl_ id (runs.js). ON CONFLICT DO NOTHING both dedupes
+// retries/reloads and means the first finished play wins — a replay that
+// still holds the id can't overwrite the honest attempt. Accounts will widen
+// player to a user id, collapsing one person's devices. guesses is the
+// client's prior wrong/near ids, with this request's guess appended
 // server-side when it isn't the solve. Same trust stance as the verdicts —
 // fake plays are POSTable, and at this scale that's fine. Logging is
 // best-effort: the reveal must ship even if the insert fails.
 //
 //   CREATE TABLE plays (
-//     id text PRIMARY KEY,          -- client-minted pl_<10 lowercase base36>
 //     incident_key text NOT NULL,   -- '3' or 'ic_...'
+//     player text NOT NULL,         -- pl_<10 lowercase base36>; user id later
 //     solved boolean NOT NULL,
 //     hours int NOT NULL,           -- the hour the play ended, 1..HOURS
 //     guesses text[] NOT NULL,      -- wrong + near ids, in order
-//     created_at timestamptz DEFAULT now()
+//     created_at timestamptz DEFAULT now(),
+//     PRIMARY KEY (incident_key, player)
 //   );
-//   CREATE INDEX plays_incident_key_idx ON plays (incident_key);
 // ---------------------------------------------------------------------------
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "method not allowed" });
     return;
   }
-  const { key, guessId, hour, playId, guesses } = req.body ?? {};
+  const { key, guessId, hour, player, guesses } = req.body ?? {};
   const sql = neon(process.env.DATABASE_URL);
   let rows;
   if (typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key)) {
@@ -66,8 +69,8 @@ export default async function handler(req, res) {
     out.answerId = inc.answerId;
     out.postmortem = inc.postmortem;
     if (
-      typeof playId === "string" &&
-      /^pl_[a-z0-9]{10}$/.test(playId) &&
+      typeof player === "string" &&
+      /^pl_[a-z0-9]{10}$/.test(player) &&
       Number.isInteger(hour) &&
       hour >= 1 &&
       hour <= HOURS
@@ -78,9 +81,9 @@ export default async function handler(req, res) {
         out.verdict && out.verdict !== "solve" && isId(guessId) ? [...prior, guessId] : prior;
       try {
         await sql`
-          INSERT INTO plays (id, incident_key, solved, hours, guesses)
-          VALUES (${playId}, ${String(key)}, ${out.verdict === "solve"}, ${hour}, ${all})
-          ON CONFLICT (id) DO NOTHING`;
+          INSERT INTO plays (incident_key, player, solved, hours, guesses)
+          VALUES (${String(key)}, ${player}, ${out.verdict === "solve"}, ${hour}, ${all})
+          ON CONFLICT DO NOTHING`;
       } catch {}
     }
   }

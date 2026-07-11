@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
-import { loadRun, saveRun, mintPlayId } from "./runs.js";
+import { loadRun, saveRun, getPlayerId } from "./runs.js";
 import Header from "./Header.jsx";
 import { highlight, rich } from "./text.jsx";
 
@@ -106,7 +106,6 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
-  const [playId] = useState(() => saved?.i ?? mintPlayId()); // dedupe key for the server's plays log
   // { answerId, postmortem } — arrives from /api/guess when the run ends
   const [reveal, setReveal] = useState(() => saved?.r ?? null);
   const [feed, setFeed] = useState(() =>
@@ -141,10 +140,9 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       a: actions,
       g: guessedIds,
       t: startedAt,
-      i: playId,
       ...(reveal && { r: reveal }),
     });
-  }, [storageKey, status, actions, guessedIds, startedAt, playId, reveal]);
+  }, [storageKey, status, actions, guessedIds, startedAt, reveal]);
 
   // how everyone else did — spoiler-safe only after the verdict, so nothing
   // is requested while the run is live. Best-effort: no strip on failure.
@@ -215,7 +213,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setNetFail(false);
     setBusy(true);
     try {
-      const r = await postGuess({ key: storageKey, hour, playId, guesses: guessedIds });
+      const r = await postGuess({ key: storageKey, hour, player: getPlayerId(), guesses: guessedIds });
       setActions([...actions, "obs"]);
       finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
     } catch {
@@ -232,7 +230,13 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setBusy(true);
     let r;
     try {
-      r = await postGuess({ key: storageKey, guessId: ans.id, hour, playId, guesses: guessedIds });
+      r = await postGuess({
+        key: storageKey,
+        guessId: ans.id,
+        hour,
+        player: getPlayerId(),
+        guesses: guessedIds,
+      });
     } catch {
       setNetFail(true);
       setBusy(false);

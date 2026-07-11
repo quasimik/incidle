@@ -1,20 +1,30 @@
 // ---------------------------------------------------------------------------
 // SAVED RUNS — one localStorage entry per incident: { s: status, a: actions,
-// g: guessed ids in order, t: started-at ms, i: play id (see mintPlayId),
-// r: reveal ({ answerId, postmortem }, present once the run ends) }, keyed by
-// the daily's number or a custom's ic_ id. Saved mid-game too, so a reload or
-// a trip to the archive resumes where you were — and a finished daily stays
-// finished, Wordle-style.
+// g: guessed ids in order, t: started-at ms, r: reveal ({ answerId,
+// postmortem }, present once the run ends) }, keyed by the daily's number or
+// a custom's ic_ id. Saved mid-game too, so a reload or a trip to the archive
+// resumes where you were — and a finished daily stays finished, Wordle-style.
 // ---------------------------------------------------------------------------
 
-// A random id minted when a play starts and carried on every /api/guess call.
-// It exists purely so the server's plays log (global per-incident stats) can
-// dedupe: retries and reloads of the same finished play insert once. Not a
-// capability — nothing is readable by it. Minted ic_-style (seed-incidents).
+// This browser's persistent player id, minted ic_-style on first need and
+// carried on every /api/guess call: the server's plays log (global
+// per-incident stats) keys on (incident, player), so a browser counts once
+// per incident however many retries or reloads happen. Client-asserted and
+// not a capability — nothing is readable by it; accounts will swap in a
+// real user id here and collapse a player's devices.
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
-export function mintPlayId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(10));
-  return "pl_" + Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+export function getPlayerId() {
+  try {
+    let id = localStorage.getItem("incidle:player");
+    if (!id) {
+      const bytes = crypto.getRandomValues(new Uint8Array(10));
+      id = "pl_" + Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+      localStorage.setItem("incidle:player", id);
+    }
+    return id;
+  } catch {
+    return null; // no storage, no logging — the play just goes uncounted
+  }
 }
 
 export function loadRun(key) {
