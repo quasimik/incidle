@@ -22,10 +22,10 @@ export function computeStats() {
 
   // what happened at each hour T+1…T+HOURS across all finished runs — a run
   // that ended early just isn't counted in the hours after its solve
-  const hours = Array.from({ length: HOURS }, () => ({ obs: 0, guess: 0, solve: 0 }));
+  const hours = Array.from({ length: HOURS }, () => ({ obs: 0, wrong: 0, near: 0, solve: 0 }));
   for (const { run } of finished)
     run.a.forEach((act, i) => {
-      hours[i][act === "obs" ? "obs" : act === "solve" ? "solve" : "guess"]++;
+      if (hours[i][act] !== undefined) hours[i][act]++;
     });
 
   const avg = (f) =>

@@ -5,8 +5,8 @@ import { HOURS } from "../src/rules.js";
 // Server-side verdicts. The incident payloads no longer carry answerId /
 // nearIds / postmortem (see api/incidents.js), so the client can't grade its
 // own guesses: every guess lands here, and the reveal ({ answerId,
-// postmortem }) ships only when the run ends — a correct guess, or any
-// request marked with the budget's last hour. guessId null asks for the
+// postmortem }) ships only when the run ends — a solve, or any request
+// marked with the budget's last hour. guessId null asks for the
 // reveal alone (an investigate burning the final hour).
 //
 // key addresses the incident the same way run storage does: a daily's num or
@@ -22,7 +22,7 @@ import { HOURS } from "../src/rules.js";
 // player to a user id, collapsing one person's devices. actions and guesses
 // arrive as the client's prior hour-by-hour moves and wrong/near ids, and
 // the ending move/guess is appended server-side — so the row holds the
-// play's complete sequence, info steps included, for stats not yet designed
+// play's complete sequence, observations included, for stats not yet designed
 // (explore-vs-exploit slicing like the personal ones). Same trust stance as
 // the verdicts — fake plays are POSTable, and at this scale that's fine.
 // Logging is best-effort: the reveal must ship even if the insert fails.

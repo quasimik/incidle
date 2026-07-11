@@ -31,7 +31,8 @@ a.brand:hover { color: var(--cyan); }
 .budget { display: flex; align-items: center; gap: 6px; }
 .pip { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
 .pip-obs { background: var(--cyan); }
-.pip-wrong, .pip-near { background: var(--red); } /* near still burned the hour */
+.pip-wrong { background: var(--red); }
+.pip-near { background: var(--amber); }
 .pip-solve { background: var(--green); }
 .budget-label { margin-left: 8px; color: var(--muted); font-size: 12.5px; }
 
@@ -203,15 +204,16 @@ a.brand:hover { color: var(--cyan); }
 .stat-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .leg-dot { width: 10px; height: 10px; border-radius: 3px; }
 .leg-obs { background: var(--cyan); }
-.leg-guess { background: var(--red); }
+.leg-wrong { background: var(--red); }
+.leg-near { background: var(--amber); }
 .leg-solve { background: var(--green); }
 .stat-head {
   font-size: 11px; font-weight: 600; letter-spacing: .14em;
   color: var(--muted); margin-bottom: 8px;
 }
 .stat-head-log { margin-top: 20px; }
-/* one row per hour: how every finished run spent it (blue investigate, red
-   wrong guess, green solve); widths are shares of all finished runs, so the
+/* one row per hour: how every finished run spent it (blue obs, red wrong,
+   amber near, green solve); widths are shares of all finished runs, so the
    rows thin out as runs end early */
 .hourly-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .hourly-label {
@@ -221,7 +223,8 @@ a.brand:hover { color: var(--cyan); }
 .hourly-track { flex: 1; min-width: 0; display: flex; gap: 2px; height: 13px; }
 .hourly-seg { border-radius: 3px; }
 .seg-obs { background: var(--cyan); }
-.seg-guess { background: var(--red); }
+.seg-wrong { background: var(--red); }
+.seg-near { background: var(--amber); }
 .seg-solve { background: var(--green); }
 /* the waterfall: one share-strip of squares per finished daily, newest first */
 .wf { list-style: none; margin: 0; padding: 0; }
@@ -235,7 +238,8 @@ a.brand:hover { color: var(--cyan); }
   box-sizing: border-box; border: 1px solid var(--line);
 }
 .wf-obs { background: var(--cyan); border-color: var(--cyan); }
-.wf-wrong, .wf-near { background: var(--red); border-color: var(--red); }
+.wf-wrong { background: var(--red); border-color: var(--red); }
+.wf-near { background: var(--amber); border-color: var(--amber); }
 .wf-solve { background: var(--green); border-color: var(--green); }
 .wf-out { margin-left: 6px; font-size: 12px; color: var(--muted); }
 /* preview/localhost-only tools (see DEV in Stats.jsx) */

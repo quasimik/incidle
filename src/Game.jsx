@@ -304,7 +304,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   }
 
   function shareText() {
-    const sq = { obs: "🟦", wrong: "🟥", near: "🟥", solve: "🟩" };
+    const sq = { obs: "🟦", wrong: "🟥", near: "🟧", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
     const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
     // customs are reachable only by their link, so the share must carry it;

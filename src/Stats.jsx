@@ -12,7 +12,7 @@ const fmt = (n) => (Math.round(n * 10) / 10).toString();
 // when it opens — see stats.js. Headline tiles, then an hour-by-hour stack of
 // every finished run's actions, then the waterfall: one share-style row of
 // squares per finished daily. All three speak the pip/share color language:
-// blue investigated, red guessed wrong, green solved.
+// blue obs, red wrong, amber near, green solve.
 export default function StatsModal({ onClose }) {
   const [rev, setRev] = useState(0); // bumped by the dev tools to recompute
   const s = useMemo(() => computeStats(), [rev]);
@@ -75,9 +75,10 @@ export default function StatsModal({ onClose }) {
           </div>
         </div>
         <div className="stat-legend">
-          <span><i className="leg-dot leg-obs" />info</span>
-          <span><i className="leg-dot leg-guess" />wrong</span>
-          <span><i className="leg-dot leg-solve" />correct</span>
+          <span><i className="leg-dot leg-obs" />obs</span>
+          <span><i className="leg-dot leg-wrong" />wrong</span>
+          <span><i className="leg-dot leg-near" />near</span>
+          <span><i className="leg-dot leg-solve" />solve</span>
         </div>
 
         <div className="stat-head">HOUR BY HOUR</div>
@@ -85,8 +86,9 @@ export default function StatsModal({ onClose }) {
           <div key={i} className="hourly-row">
             <span className="hourly-label">T+{i + 1}</span>
             <div className="hourly-track">
-              {seg(h.obs, "seg-obs", "investigated")}
-              {seg(h.guess, "seg-guess", "guessed wrong")}
+              {seg(h.obs, "seg-obs", "observed")}
+              {seg(h.wrong, "seg-wrong", "guessed wrong")}
+              {seg(h.near, "seg-near", "guessed near")}
               {seg(h.solve, "seg-solve", "solved")}
             </div>
           </div>
