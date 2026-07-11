@@ -136,6 +136,17 @@ a.brand:hover { color: var(--cyan); }
 .post-stats-wrong { color: var(--red); }
 .post-stats-near { color: var(--amber); }
 .post-stats-solve { color: var(--green); }
+/* attribution + inspiration footnote; rides the reveal, not the incident
+   payload (the inspiration names the real-world outage — a giveaway) */
+.post-credit {
+  margin: 0 0 14px; font-size: 12px; color: var(--muted);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.credit-link {
+  background: none; border: 0; padding: 0; font: inherit;
+  color: var(--cyan); text-decoration: none; cursor: pointer;
+}
+.credit-link:hover { text-decoration: underline; }
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 

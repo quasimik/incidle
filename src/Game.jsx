@@ -32,6 +32,14 @@ async function postGuess(body) {
   return r.json();
 }
 
+// The slice of a run-ending /api/guess response that gets kept (in state and
+// in the saved run) as the reveal. author/inspiration are the postmortem's
+// credit line; absent for uncredited incidents — and for runs saved before
+// credits existed, which is why the credit render guards on them.
+function toReveal(r) {
+  return { answerId: r.answerId, postmortem: r.postmortem, author: r.author, inspiration: r.inspiration };
+}
+
 // "42 responders · 62% resolved · median solve T+4", then on its own line
 // "top guesses: connection pool exhaustion 62%, cache stampede 31%, dns
 // failure 17%" — or a first-responder nod when the log holds only this play.
@@ -128,7 +136,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
-  // { answerId, postmortem } — arrives from /api/guess when the run ends
+  // { answerId, postmortem, author?, inspiration? } — arrives from /api/guess when the run ends
   const [reveal, setReveal] = useState(() => saved?.r ?? null);
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
@@ -146,6 +154,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   const [overlayUp, setOverlayUp] = useState(false); // a header modal is covering the page
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
+  const headerModals = useRef(null); // Header's modal openers — the credit line links "the developer" to about
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
 
   const maxClues = c.clues.length;
@@ -243,7 +252,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         guesses: guessedIds,
       });
       setActions([...actions, "obs"]);
-      finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+      finishEscalate([...feed, entry], toReveal(r));
     } catch {
       setNetFail(true); // the hour isn't burned; the button retries
     }
@@ -278,7 +287,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     const t = eventTime(hour);
     setActions([...actions, r.verdict]);
     if (r.verdict === "solve") {
-      setReveal({ answerId: r.answerId, postmortem: r.postmortem });
+      setReveal(toReveal(r));
       setFeed([...feed, { type: "resolve", time: t, text: `${ans.name}` }]);
       setStatus("solved");
       return;
@@ -288,7 +297,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
         : { type: "reject", time: t, text: `${ans.name}` };
     setGuessedIds([...guessedIds, ans.id]);
-    if (hour >= HOURS) finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+    if (hour >= HOURS) finishEscalate([...feed, entry], toReveal(r));
     else setFeed([...feed, entry]);
   }
 
@@ -365,6 +374,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         sub={sub}
         onHelpDismiss={() => setTimeout(focusInput, 0)} // hand focus back to the input the modal was covering
         onOverlayChange={setOverlayUp}
+        modalsRef={headerModals}
         right={
           <div className="budget" aria-label="hour budget">
             {Array.from({ length: HOURS }, (_, i) => (
@@ -429,6 +439,42 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               if (status === "solved" && reveal?.answerId) mine[reveal.answerId] = "solve";
               return <p className="post-stats">{crowdLine(crowd, answerById, reveal?.answerId, mine)}</p>;
             })()}
+            {(reveal?.author || reveal?.inspiration) && (
+              <p className="post-credit">
+                {reveal.author && (
+                  <>
+                    this incident was substantially written by{" "}
+                    {reveal.author === "ai" ? (
+                      "AI"
+                    ) : reveal.author === "dev" ? (
+                      <button className="credit-link" onClick={() => headerModals.current?.about()}>
+                        the developer
+                      </button>
+                    ) : (
+                      reveal.author
+                    )}
+                  </>
+                )}
+                {reveal.author && reveal.inspiration && " · "}
+                {reveal.inspiration && (
+                  <>
+                    inspired by{" "}
+                    {reveal.inspiration.url ? (
+                      <a
+                        className="credit-link"
+                        href={reveal.inspiration.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {reveal.inspiration.text}
+                      </a>
+                    ) : (
+                      reveal.inspiration.text
+                    )}
+                  </>
+                )}
+              </p>
+            )}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

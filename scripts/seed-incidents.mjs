@@ -42,26 +42,38 @@ await sql`
   CREATE TABLE IF NOT EXISTS incidents (
     id         text     PRIMARY KEY,
     num        smallint UNIQUE,
-    sev        smallint NOT NULL,
+    sev        smallint,
     topology   text     NOT NULL,
     vignette   text     NOT NULL,
     clues      jsonb    NOT NULL,
     answer_id  text     NOT NULL REFERENCES root_causes(id),
     near_ids   jsonb    NOT NULL DEFAULT '[]',
-    postmortem text     NOT NULL
+    postmortem text     NOT NULL,
+    author      text,
+    inspiration jsonb
   )`;
+// credits, shown on the postmortem. author: "ai" | "dev" (renders as "the
+// developer", linking the about modal) | any guest-writer handle, verbatim.
+// inspiration: { "text": "the 2024 CrowdStrike outage", "url": "https://…" }
+// (url optional). Both nullable — the credit line simply doesn't render.
+await sql`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS author text`;
+await sql`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS inspiration jsonb`;
+// sev is dead: newer entries don't carry one and nothing reads it anymore
+await sql`ALTER TABLE incidents ALTER COLUMN sev DROP NOT NULL`;
 
 for (const inc of data.incidents) {
   await sql`
-    INSERT INTO incidents (id, num, sev, topology, vignette, clues, answer_id, near_ids, postmortem)
-    VALUES (${inc.id}, ${inc.num ?? null}, ${inc.sev}, ${inc.topology}, ${inc.vignette},
+    INSERT INTO incidents (id, num, sev, topology, vignette, clues, answer_id, near_ids, postmortem, author, inspiration)
+    VALUES (${inc.id}, ${inc.num ?? null}, ${inc.sev ?? null}, ${inc.topology}, ${inc.vignette},
             ${JSON.stringify(inc.clues)}::jsonb, ${inc.answerId},
-            ${JSON.stringify(inc.nearIds ?? [])}::jsonb, ${inc.postmortem})
+            ${JSON.stringify(inc.nearIds ?? [])}::jsonb, ${inc.postmortem},
+            ${inc.author ?? null}, ${inc.inspiration ? JSON.stringify(inc.inspiration) : null}::jsonb)
     ON CONFLICT (id) DO UPDATE SET
       num = EXCLUDED.num, sev = EXCLUDED.sev, topology = EXCLUDED.topology,
       vignette = EXCLUDED.vignette, clues = EXCLUDED.clues,
       answer_id = EXCLUDED.answer_id, near_ids = EXCLUDED.near_ids,
-      postmortem = EXCLUDED.postmortem`;
+      postmortem = EXCLUDED.postmortem, author = EXCLUDED.author,
+      inspiration = EXCLUDED.inspiration`;
   const slot = inc.num != null ? `daily #${inc.num}` : `https://incidle.com/a/${inc.id}`;
   console.log(`${inc.id}  ${inc.answerId.padEnd(28)} ${slot}`);
 }

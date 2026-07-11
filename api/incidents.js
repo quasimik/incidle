@@ -33,7 +33,7 @@ import { neon } from "@neondatabase/serverless";
 export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   const rows = await sql`
-    SELECT num, sev, topology, vignette, clues
+    SELECT num, topology, vignette, clues
     FROM incidents
     WHERE num IS NOT NULL
     ORDER BY num`;

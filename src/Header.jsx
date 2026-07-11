@@ -6,7 +6,7 @@ import StatsModal from "./Stats.jsx";
 // Shared page bar: ☰ menu (plus the stats/help/about modals it opens), brand
 // link, optional sub label, and page-specific controls on the right. Every
 // screen renders this so the nav is identical everywhere.
-export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, onOverlayChange }) {
+export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, onOverlayChange, modalsRef }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // The how-to-play opens itself once on first visit, then remembers it was
   // seen. Guarded so a blocked localStorage (private mode) just shows the intro.
@@ -57,6 +57,11 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
   useEffect(() => {
     onOverlayChange?.(showHelp || showAbout || showStats);
   }, [showHelp, showAbout, showStats]);
+
+  // let the page open modals that live here (the postmortem credit → about)
+  useEffect(() => {
+    if (modalsRef) modalsRef.current = { about: () => setShowAbout(true) };
+  }, [modalsRef]);
 
   return (
     <>

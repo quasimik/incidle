@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   }
   const sql = neon(process.env.DATABASE_URL);
   const rows = await sql`
-    SELECT id, sev, topology, vignette, clues
+    SELECT id, topology, vignette, clues
     FROM incidents
     WHERE id = ${id}`;
   if (rows.length === 0) {
