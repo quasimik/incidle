@@ -41,10 +41,10 @@ function toReveal(r) {
   return { answerId: r.answerId, postmortem: r.postmortem, author: r.author, inspiration: r.inspiration };
 }
 
-// "42 responders · 62% resolved · median solve T+4", then on its own line
-// "top guesses: connection pool exhaustion 62%, cache stampede 31%, dns
+// "42 responders: 62% resolved · mean solve T+4.3", then on its own line
+// "top guesses: connection pool exhaustion 62% · cache stampede 31% · dns
 // failure 17%" — or a first-responder nod when the log holds only this play.
-// Median is over solved plays. The top list ranks the crowd's incorrect
+// Mean is over solved plays. The top list ranks the crowd's incorrect
 // guesses (near and wrong both count) against the answer itself, whose count
 // is the solves; percentages are shares of responders, an id needs 2+ votes
 // so one stray guess isn't billed as a crowd trend, and entries this player
@@ -52,15 +52,11 @@ function toReveal(r) {
 // red wrong, amber near, green solve (mine maps guessed id → verdict).
 function crowdLine(stats, answerById, answerId, mine) {
   if (stats.played === 1) return "you're the first responder on this incident.";
-  const parts = [
-    `${stats.played} responders`,
-    `${Math.round((stats.solved / stats.played) * 100)}% resolved`,
-  ];
+  const parts = [`${Math.round((stats.solved / stats.played) * 100)}% resolved`];
   if (stats.solved > 0) {
-    let left = Math.floor((stats.solved - 1) / 2) + 1; // lower median
-    let med = 0;
-    while (left > 0 && med < stats.hours.length) left -= stats.hours[med++];
-    parts.push(`median solve T+${med}`);
+    // hours[i] counts solves at T+(i+1) — see api/stats.js
+    const spent = stats.hours.reduce((sum, n, i) => sum + n * (i + 1), 0);
+    parts.push(`mean solve T+${(spent / stats.solved).toFixed(1)}`);
   }
   const ranked = [...(stats.topIncorrect ?? [])];
   if (stats.solved > 0 && answerId) ranked.push({ id: answerId, n: stats.solved });
@@ -73,13 +69,13 @@ function crowdLine(stats, answerById, answerId, mine) {
       const v = mine[t.id];
       return v ? <span key={t.id} className={`post-stats-${v}`}>{text}</span> : text;
     });
-  const line = parts.join(" · ");
+  const line = `${stats.played} responders: ${parts.join(" · ")}`;
   if (top.length === 0) return line;
   return (
     <>
       {line}
       <br />
-      top guesses: {top.flatMap((t, i) => (i > 0 ? [", ", t] : [t]))}
+      top guesses: {top.flatMap((t, i) => (i > 0 ? [" · ", t] : [t]))}
     </>
   );
 }
