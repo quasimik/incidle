@@ -132,7 +132,10 @@ a.brand:hover { color: var(--cyan); }
   margin: 0 0 14px; font-size: 13px; color: var(--muted);
   font-family: 'Inter', system-ui, sans-serif;
 }
-.post-stats-you { color: var(--text); } /* a crowd guess this player shares */
+/* crowd top guesses this player shares, tinted by the player's own verdict */
+.post-stats-wrong { color: var(--red); }
+.post-stats-near { color: var(--amber); }
+.post-stats-solve { color: var(--green); }
 .post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .post-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 

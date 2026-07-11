@@ -33,13 +33,15 @@ async function postGuess(body) {
 }
 
 // "42 responders · 62% resolved · median solve T+4", then on its own line
-// "top 3 incorrect guesses: cache stampede 31% (you), dns failure 17%, thread
-// pool 12%" — or a first-responder nod when the log holds only this play.
-// Median is over solved plays; percentages are shares of responders who
-// guessed that id (near or wrong both count), an id needs 2+ votes so one
-// stray guess isn't billed as a crowd trend, and the entries this player also
-// guessed are brightened and marked "(you)".
-function crowdLine(stats, answerById, guessedIds) {
+// "top guesses: connection pool exhaustion 62%, cache stampede 31%, dns
+// failure 17%" — or a first-responder nod when the log holds only this play.
+// Median is over solved plays. The top list ranks the crowd's incorrect
+// guesses (near and wrong both count) against the answer itself, whose count
+// is the solves; percentages are shares of responders, an id needs 2+ votes
+// so one stray guess isn't billed as a crowd trend, and entries this player
+// also guessed take their color from the player's own verdict on them —
+// red wrong, amber near, green solve (mine maps guessed id → verdict).
+function crowdLine(stats, answerById, answerId, mine) {
   if (stats.played === 1) return "you're the first responder on this incident.";
   const parts = [
     `${stats.played} responders`,
@@ -51,24 +53,24 @@ function crowdLine(stats, answerById, guessedIds) {
     while (left > 0 && med < stats.hours.length) left -= stats.hours[med++];
     parts.push(`median solve T+${med}`);
   }
-  const top = (stats.topIncorrect ?? [])
+  const ranked = [...(stats.topIncorrect ?? [])];
+  if (stats.solved > 0 && answerId) ranked.push({ id: answerId, n: stats.solved });
+  const top = ranked
+    .sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1))
     .filter((t) => t.n >= 2 && answerById[t.id]?.name)
+    .slice(0, 3)
     .map((t) => {
       const text = `${answerById[t.id].name} ${Math.round((100 * t.n) / stats.played)}%`;
-      return guessedIds.includes(t.id) ? (
-        <span key={t.id} className="post-stats-you">{text} (you)</span>
-      ) : (
-        text
-      );
+      const v = mine[t.id];
+      return v ? <span key={t.id} className={`post-stats-${v}`}>{text}</span> : text;
     });
   const line = parts.join(" · ");
   if (top.length === 0) return line;
-  const label = top.length === 1 ? "top incorrect guess" : `top ${top.length} incorrect guesses`;
   return (
     <>
       {line}
       <br />
-      {label}: {top.flatMap((t, i) => (i > 0 ? [", ", t] : [t]))}
+      top guesses: {top.flatMap((t, i) => (i > 0 ? [", ", t] : [t]))}
     </>
   );
 }
@@ -418,7 +420,15 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               </div>
             )}
             {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
-            {crowd && <p className="post-stats">{crowdLine(crowd, answerById, guessedIds)}</p>}
+            {crowd && (() => {
+              // this player's verdict per guessed id — guessedIds align with
+              // the wrong/near entries of actions, in order (see api/guess.js)
+              const verdicts = actions.filter((a) => a === "wrong" || a === "near");
+              const mine = {};
+              guessedIds.forEach((id, i) => { mine[id] = verdicts[i] ?? "wrong"; });
+              if (status === "solved" && reveal?.answerId) mine[reveal.answerId] = "solve";
+              return <p className="post-stats">{crowdLine(crowd, answerById, reveal?.answerId, mine)}</p>;
+            })()}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
