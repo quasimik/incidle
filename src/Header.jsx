@@ -167,7 +167,8 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
             onClick={(e) => e.stopPropagation()}
           >
             <div className="about-spark">✨</div>
-            <p className="about-line">made in san francisco by michael</p>
+            <p className="about-line">made by michael</p>
+            <p className="about-line">in foggy san francisco</p>
             <a className="about-link" href="https://mic.hael.me" target="_blank" rel="noopener noreferrer">
               mic.hael.me
             </a>
