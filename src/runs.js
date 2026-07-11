@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // SAVED RUNS — one localStorage entry per incident: { s: status, a: actions,
-// g: guessed ids in order, t: started-at ms, r: reveal ({ answerId,
-// postmortem }, present once the run ends) }, keyed by the daily's number or
-// a custom's ic_ id. Saved mid-game too, so a reload or a trip to the archive
-// resumes where you were — and a finished daily stays finished, Wordle-style.
+// g: guessed ids in order (the solving guess included), t: started-at ms,
+// r: reveal ({ answerIds: accepted causes best-first, postmortem }, present
+// once the run ends) }, keyed by the daily's number or a custom's ic_ id.
+// Runs saved before accept-sets carry r.answerId instead; readers normalize.
+// Saved mid-game too, so a reload or a trip to the archive resumes where you
+// were — and a finished daily stays finished, Wordle-style.
 // ---------------------------------------------------------------------------
 export function loadRun(key) {
   try {

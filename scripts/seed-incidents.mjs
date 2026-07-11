@@ -51,10 +51,11 @@ await sql`
     postmortem text     NOT NULL
   )`;
 
-// answer_ids is an accept-set: any member counts as the solve, [0] is the
-// canonical label the reveal names. jsonb can't carry the FK the old scalar
-// answer_id had, so the catalog check happens here instead — every answer and
-// near id must exist in root_causes before anything is written.
+// answer_ids is an accept-set in descending order of goodness: any member
+// counts as the solve, and the reveal shows them all, headlining [0] as the
+// best. jsonb can't carry the FK the old scalar answer_id had, so the catalog
+// check happens here instead — every answer and near id must exist in
+// root_causes before anything is written.
 const known = new Set((await sql`SELECT id FROM root_causes`).map((r) => r.id));
 for (const inc of data.incidents) {
   const answerIds = inc.answerIds ?? [inc.answerId];

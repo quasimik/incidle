@@ -33,12 +33,14 @@ async function postGuess(body) {
 }
 
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
-// handleGuess. "obs" consumes the next clue, "near"/"wrong" the next saved
-// guess id; the resolve/escalate lines name the answer from the run's stored
-// reveal (the rare finished run without one renders "…" and no postmortem).
+// handleGuess. "obs" consumes the next clue, "near"/"wrong"/"solve" the next
+// saved guess id — the resolve line names the guess that solved it, which may
+// be an accepted answer other than the best one. Runs saved before solves
+// were recorded in g (and the rare finished run without a reveal) fall back
+// to the reveal's best answer, or "…".
 function rebuildFeed(inc, run, answerById) {
   const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
-  const revealName = answerById[run.r?.answerId]?.name ?? "…";
+  const bestName = answerById[(run.r?.answerIds ?? [run.r?.answerId])[0]]?.name ?? "…";
   let clue = 0;
   let gi = 0;
   run.a.forEach((act, i) => {
@@ -46,7 +48,7 @@ function rebuildFeed(inc, run, answerById) {
     if (act === "obs") {
       feed.push({ type: "clue", time, text: inc.clues[clue++] });
     } else if (act === "solve") {
-      feed.push({ type: "resolve", time, text: revealName });
+      feed.push({ type: "resolve", time, text: answerById[run.g[gi++]]?.name ?? bestName });
     } else {
       const id = run.g[gi++];
       const name = answerById[id]?.name ?? id;
@@ -58,7 +60,7 @@ function rebuildFeed(inc, run, answerById) {
     }
   });
   if (run.s === "failed")
-    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${revealName}.` });
+    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${bestName}.` });
   return feed;
 }
 
@@ -85,8 +87,14 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
-  // { answerId, postmortem } — arrives from /api/guess when the run ends
-  const [reveal, setReveal] = useState(() => saved?.r ?? null);
+  // { answerIds, postmortem } — arrives from /api/guess when the run ends.
+  // answerIds is every accepted cause in descending order of goodness; runs
+  // saved before accept-sets stored a scalar answerId and are normalized here.
+  const [reveal, setReveal] = useState(() => {
+    const r = saved?.r;
+    if (!r) return null;
+    return r.answerIds ? r : { ...r, answerIds: [r.answerId] };
+  });
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
   );
@@ -158,7 +166,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setReveal(rev);
     setFeed([
       ...newFeed,
-      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerId]?.name}.` },
+      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerIds[0]]?.name}.` },
     ]);
     setStatus("failed");
   }
@@ -179,7 +187,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     try {
       const r = await postGuess({ key: storageKey, hour });
       setActions([...actions, "obs"]);
-      finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+      finishEscalate([...feed, entry], { answerIds: r.answerIds, postmortem: r.postmortem });
     } catch {
       setNetFail(true); // the hour isn't burned; the button retries
     }
@@ -206,8 +214,11 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setSelIdx(0);
     const t = eventTime(hour);
     setActions([...actions, r.verdict]);
+    // every guess lands in g, the solve included — the saved run holds the
+    // full sequence, and rebuildFeed names the solving guess from it
+    setGuessedIds([...guessedIds, ans.id]);
     if (r.verdict === "solve") {
-      setReveal({ answerId: r.answerId, postmortem: r.postmortem });
+      setReveal({ answerIds: r.answerIds, postmortem: r.postmortem });
       setFeed([...feed, { type: "resolve", time: t, text: `${ans.name}` }]);
       setStatus("solved");
       return;
@@ -216,8 +227,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       r.verdict === "near"
         ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
         : { type: "reject", time: t, text: `${ans.name}` };
-    setGuessedIds([...guessedIds, ans.id]);
-    if (hour >= HOURS) finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+    if (hour >= HOURS) finishEscalate([...feed, entry], { answerIds: r.answerIds, postmortem: r.postmortem });
     else setFeed([...feed, entry]);
   }
 
@@ -325,7 +335,9 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         ))}
 
         {done && (() => {
-          const ans = answerById[reveal?.answerId];
+          // every accepted cause, best first — ranking is honest, so the
+          // best answer keeps the target treatment and the rest go quieter
+          const accepted = (reveal?.answerIds ?? []).map((id) => answerById[id]).filter(Boolean);
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
@@ -341,13 +353,13 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
                 </ul>
               </details>
             )}
-            {ans?.description && (
-              <div className="callout">
-                <span className="callout-icon">🎯</span>
-                <div className="callout-head">Root cause: {ans.name}</div>
-                <p className="callout-body">{rich(ans.description)}</p>
+            {accepted.map((ans, i) => (
+              <div key={ans.id} className={i === 0 ? "callout" : "callout callout-alt"}>
+                <span className="callout-icon">{i === 0 ? "🎯" : "✅"}</span>
+                <div className="callout-head">{i === 0 ? "Root cause" : "Also accepted"}: {ans.name}</div>
+                {ans.description && <p className="callout-body">{rich(ans.description)}</p>}
               </div>
-            )}
+            ))}
             {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>

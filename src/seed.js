@@ -42,7 +42,7 @@ function fabricateRun(startedAt) {
   return {
     s: solved ? "solved" : "failed",
     a,
-    g: a.filter((x) => x === "wrong" || x === "near").map((_, i) => `seed-guess-${i + 1}`),
+    g: a.filter((x) => x !== "obs").map((_, i) => `seed-guess-${i + 1}`), // solve included, like real runs
     t: startedAt,
   };
 }
