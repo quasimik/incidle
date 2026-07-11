@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { Fragment, useState, useMemo, useRef, useEffect } from "react";
 import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
 import { loadRun, saveRun, getPlayerId } from "./runs.js";
@@ -432,19 +432,26 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         )}
 
         {done && (() => {
-          // every accepted cause, best first — ranking is honest, so the
-          // best answer keeps the target treatment and the rest go quieter
+          // every accepted cause, best first — one well: the best answer gets
+          // the target treatment, the rest repeat the head/body pair below it
+          // in a quieter voice
           const accepted = (reveal?.answerIds ?? []).map((id) => answerById[id]).filter(Boolean);
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
-            {accepted.map((ans, i) => (
-              <div key={ans.id} className={i === 0 ? "callout" : "callout callout-alt"}>
-                <span className="callout-icon">{i === 0 ? "🎯" : "✅"}</span>
-                <div className="callout-head">{i === 0 ? "Root cause" : "Also accepted"}: {ans.name}</div>
-                {ans.description && <p className="callout-body">{rich(ans.description)}</p>}
+            {accepted.length > 0 && (
+              <div className="callout">
+                <span className="callout-icon">🎯</span>
+                <div className="callout-head">Root cause: {accepted[0].name}</div>
+                {accepted[0].description && <p className="callout-body">{rich(accepted[0].description)}</p>}
+                {accepted.slice(1).map((ans) => (
+                  <Fragment key={ans.id}>
+                    <div className="callout-head callout-alt-head">Accepted: {ans.name}</div>
+                    {ans.description && <p className="callout-body callout-also">{rich(ans.description)}</p>}
+                  </Fragment>
+                ))}
               </div>
-            ))}
+            )}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
