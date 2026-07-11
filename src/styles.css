@@ -139,7 +139,7 @@ a.brand:hover { color: var(--cyan); }
 /* attribution + inspiration footnote; rides the reveal, not the incident
    payload (the inspiration names the real-world outage — a giveaway) */
 .post-credit {
-  margin: 0 0 14px; font-size: 12px; color: var(--muted);
+  margin: 0 0 14px; font-size: 13px; color: var(--muted);
   font-family: 'Inter', system-ui, sans-serif;
 }
 .credit-link {
