@@ -151,7 +151,6 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   const [overlayUp, setOverlayUp] = useState(false); // a header modal is covering the page
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
-  const headerModals = useRef(null); // Header's modal openers — the credit line links "the developer" to about
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
 
   const maxClues = c.clues.length;
@@ -383,7 +382,6 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
         sub={sub}
         onHelpDismiss={() => setTimeout(focusInput, 0)} // hand focus back to the input the modal was covering
         onOverlayChange={setOverlayUp}
-        modalsRef={headerModals}
         right={
           <div className="budget" aria-label="hour budget">
             {Array.from({ length: HOURS }, (_, i) => (
@@ -482,23 +480,26 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
               if (status === "solved" && guessedIds.length > 0) mine[guessedIds[guessedIds.length - 1]] = "solve";
               return <p className="post-stats">{crowdLine(crowd, answerById, mine)}</p>;
             })()}
-            {(reveal?.author || reveal?.inspiration) && (
+            {(reveal?.author?.text || reveal?.inspiration) && (
               <p className="post-credit">
-                {reveal.author && (
+                {reveal.author?.text && (
                   <>
-                    this incident was substantially written by{" "}
-                    {reveal.author === "ai" ? (
-                      "AI"
-                    ) : reveal.author === "dev" ? (
-                      <button className="credit-link" onClick={() => headerModals.current?.about()}>
-                        the developer
-                      </button>
+                    guest contribution by{" "}
+                    {reveal.author.url ? (
+                      <a
+                        className="credit-link"
+                        href={reveal.author.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {reveal.author.text}
+                      </a>
                     ) : (
-                      reveal.author
+                      reveal.author.text
                     )}
                   </>
                 )}
-                {reveal.author && reveal.inspiration && " · "}
+                {reveal.author?.text && reveal.inspiration && " · "}
                 {reveal.inspiration && (
                   <>
                     inspired by{" "}

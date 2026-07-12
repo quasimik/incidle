@@ -49,14 +49,15 @@ await sql`
     answer_ids jsonb    NOT NULL,
     near_ids   jsonb    NOT NULL DEFAULT '[]',
     postmortem text     NOT NULL,
-    author      text,
+    author      jsonb,
     inspiration jsonb
   )`;
-// credits, shown on the postmortem. author: "ai" | "dev" (renders as "the
-// developer", linking the about modal) | any guest-writer handle, verbatim.
+// credits, shown on the postmortem. author is guest contributions only —
+// { "text": "handle", "url": "https://…" } (url optional), rendered as
+// "guest contribution by <handle>"; omit it for house-written incidents.
 // inspiration: { "text": "the 2024 CrowdStrike outage", "url": "https://…" }
 // (url optional). Both nullable — the credit line simply doesn't render.
-await sql`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS author text`;
+await sql`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS author jsonb`;
 await sql`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS inspiration jsonb`;
 // sev is dead: newer entries don't carry one and nothing reads it anymore
 await sql`ALTER TABLE incidents ALTER COLUMN sev DROP NOT NULL`;
@@ -81,7 +82,8 @@ for (const inc of data.incidents) {
     VALUES (${inc.id}, ${inc.num ?? null}, ${inc.sev ?? null}, ${inc.topology}, ${inc.vignette},
             ${JSON.stringify(inc.clues)}::jsonb, ${JSON.stringify(answerIds)}::jsonb,
             ${JSON.stringify(inc.nearIds ?? [])}::jsonb, ${inc.postmortem},
-            ${inc.author ?? null}, ${inc.inspiration ? JSON.stringify(inc.inspiration) : null}::jsonb)
+            ${inc.author ? JSON.stringify(inc.author) : null}::jsonb,
+            ${inc.inspiration ? JSON.stringify(inc.inspiration) : null}::jsonb)
     ON CONFLICT (id) DO UPDATE SET
       num = EXCLUDED.num, sev = EXCLUDED.sev, topology = EXCLUDED.topology,
       vignette = EXCLUDED.vignette, clues = EXCLUDED.clues,
