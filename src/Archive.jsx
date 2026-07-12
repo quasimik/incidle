@@ -13,11 +13,13 @@ function runStatus(run) {
   return <span className="arch-status arch-progress">T+{run.a.length} · in progress</span>;
 }
 
-export default function Archive({ today, dailyCount }) {
+export default function Archive({ today, incidents }) {
   const todayNum = Math.max(0, dayNumber(today));
+  // runs are keyed by incident id (runs.js), so a day's status needs its id
+  const idByNum = new Map(incidents.map((inc) => [inc.num, inc.id]));
   // no dailies scheduled → no calendar rows to offer
   const days =
-    dailyCount > 0 ? Array.from({ length: todayNum + 1 }, (_, i) => todayNum - i) : [];
+    incidents.length > 0 ? Array.from({ length: todayNum + 1 }, (_, i) => todayNum - i) : [];
   // customs appear here the moment a run for them exists locally
   const customs = listCustomRuns();
   return (
@@ -40,7 +42,7 @@ export default function Archive({ today, dailyCount }) {
                   <span className="arch-date">
                     {n === todayNum ? "today" : fmtShort(addDays(DAILY_EPOCH, n))}
                   </span>
-                  {runStatus(loadRun(n + 1))}
+                  {runStatus(idByNum.has(n + 1) ? loadRun(idByNum.get(n + 1)) : null)}
                 </Link>
               </li>
             ))}

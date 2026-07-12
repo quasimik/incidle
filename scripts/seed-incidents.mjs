@@ -3,9 +3,12 @@
 // ic_ id for any entry that lacks one, WRITING IT BACK into the JSON — an
 // already-shared /a/<id> link must never change, so ids live with the entry.
 //
-// Entries with a "num" are dailies (day N plays num-ordered pool[N % length]);
+// Entries with a "num" are dailies (day N plays the row whose num is N);
 // entries without one are customs, reachable only via their /a/<id> link and
-// deliberately excluded from the /api/incidents payload.
+// deliberately excluded from the /api/incidents payload. Promoting a custom
+// to a daily is just giving it a num: the ic_ id is the identity everywhere
+// (run storage, plays rows, API keys), so existing plays and shared links
+// carry over untouched, and the old link redirects once the day is live.
 //
 // Run:  set -a && source .env.local && set +a && node scripts/seed-incidents.mjs
 import { neon } from "@neondatabase/serverless";

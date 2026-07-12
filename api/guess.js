@@ -17,10 +17,13 @@ import { HOURS } from "../src/rules.js";
 // answer-vs-near threshold are post-hoc authoring judgments, not part of the
 // story's telling.
 //
-// key addresses the incident the same way run storage does: a daily's num or
-// a custom's ic_ id. This is anti-spoiler, not anti-cheat — anyone can POST
-// hour=HOURS and read the answer; the point is that idle clients and the
-// network tab never see it.
+// key is the incident's ic_ id — the one identity everywhere (run storage,
+// plays rows, /api/stats); a daily's num is schedule metadata, not an
+// address. That also closes future days: a future daily's id ships nowhere
+// (api/incidents gates the payload), so its answers are unreachable here
+// until the day arrives. Within a live incident this is anti-spoiler, not
+// anti-cheat — anyone can POST hour=HOURS and read the answer; the point is
+// that idle clients and the network tab never see it.
 //
 // A request that ends the run also logs the play (the raw material for
 // GET /api/stats): one row per (incident, player), where player is the
@@ -39,7 +42,7 @@ import { HOURS } from "../src/rules.js";
 // member under its own name (api/stats.js).
 //
 //   CREATE TABLE plays (
-//     incident_key text NOT NULL,   -- '3' or 'ic_...'
+//     incident_key text NOT NULL REFERENCES incidents(id),
 //     player text NOT NULL,         -- pl_<10 lowercase base36>; user id later
 //     solved boolean NOT NULL,
 //     hours int NOT NULL,           -- the hour the play ended, 1..HOURS
@@ -55,20 +58,14 @@ export default async function handler(req, res) {
     return;
   }
   const { key, guessId, hour, player, actions, guesses } = req.body ?? {};
-  const sql = neon(process.env.DATABASE_URL);
-  let rows;
-  if (typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key)) {
-    rows = await sql`
-      SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
-      FROM incidents WHERE id = ${key}`;
-  } else if (Number.isInteger(key) && key > 0) {
-    rows = await sql`
-      SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
-      FROM incidents WHERE num = ${key}`;
-  } else {
+  if (!(typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key))) {
     res.status(400).json({ error: "bad key" });
     return;
   }
+  const sql = neon(process.env.DATABASE_URL);
+  const rows = await sql`
+    SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
+    FROM incidents WHERE id = ${key}`;
   if (rows.length === 0) {
     res.status(404).json({ error: "not found" });
     return;
@@ -103,7 +100,7 @@ export default async function handler(req, res) {
       try {
         await sql`
           INSERT INTO plays (incident_key, player, solved, hours, actions, guesses)
-          VALUES (${String(key)}, ${player}, ${out.verdict === "solve"}, ${hour}, ${seq}, ${all})
+          VALUES (${key}, ${player}, ${out.verdict === "solve"}, ${hour}, ${seq}, ${all})
           ON CONFLICT DO NOTHING`;
       } catch {}
     }

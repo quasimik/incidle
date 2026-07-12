@@ -1,5 +1,5 @@
 import { HOURS } from "./rules.js";
-import { saveRun } from "./runs.js";
+import { saveRun, mergeSchedule } from "./runs.js";
 
 // ---------------------------------------------------------------------------
 // DEV SEEDER — fabricates a history of daily runs in localStorage so the
@@ -48,15 +48,21 @@ function fabricateRun(startedAt) {
 }
 
 // Overwrites runs for days 1…SEED_DAYS (skipping ~15% as unplayed days) plus
-// a few specials. Numbers past today's are fine here — this never runs on
-// real player storage.
+// a few specials. Runs are keyed by ic_ id and count as dailies only through
+// the schedule (runs.js), so the fake days get fake ids merged into it —
+// session-scoped: after a reload the seeded history drops out of the stats
+// (the leftover runs list as specials) until reseeded or cleared.
 export function seedRuns() {
   const dayMs = 864e5;
   const start = Date.now() - SEED_DAYS * dayMs;
+  const fakeDays = [];
   for (let n = 1; n <= SEED_DAYS; n++) {
     if (Math.random() < 0.15) continue; // a day they skipped
-    saveRun(n, fabricateRun(start + n * dayMs));
+    const id = `ic_seedday${String(n).padStart(2, "0")}`;
+    fakeDays.push([id, n]);
+    saveRun(id, fabricateRun(start + n * dayMs));
   }
+  mergeSchedule(fakeDays);
   for (const id of ["ic_seedaaaa", "ic_seedbbbb", "ic_seedcccc"]) {
     saveRun(id, fabricateRun(Date.now()));
   }

@@ -3,9 +3,10 @@ import { listDailyRuns } from "./runs.js";
 
 // ---------------------------------------------------------------------------
 // PERSONAL STATS — computed from this device's saved runs, Wordle-style: no
-// account, no server. Everything counts dailies only; specials (ic_) don't
-// figure in. A run counts once it's finished — in-progress runs are
-// invisible here.
+// account, no server. Everything counts dailies only — runs whose incident
+// is on the daily schedule (runs.js resolves that against the boot payload);
+// unscheduled specials don't figure in. A run counts once it's finished —
+// in-progress runs are invisible here.
 //
 // The distinctive axis of this game is explore vs. exploit — when a player
 // stops investigating and starts naming culprits — so past the counts, the
