@@ -407,8 +407,9 @@ a.brand:hover { color: var(--cyan); }
 .hdr-link { color: var(--muted); text-decoration: none; font-size: 12.5px; }
 .hdr-link:hover { color: var(--cyan); }
 
-/* archive — one row per incident: id, date (dailies only), result. Rows carry
-   nothing about the incident itself; localStorage is the whole data source. */
+/* archive — one row per calendar day (skipped days dim to "all clear") plus
+   one per local custom run. Rows carry nothing about the incident itself;
+   localStorage is the whole data source. */
 .arch-list {
   list-style: none; margin: 0 0 22px; padding: 0;
   display: flex; flex-direction: column; gap: 6px;
@@ -419,7 +420,8 @@ a.brand:hover { color: var(--cyan); }
   background: var(--panel); border: 1px solid var(--line);
   color: var(--text); text-decoration: none; font-size: 13.5px;
 }
-.arch-row:hover { border-color: var(--cyan); }
+a.arch-row:hover { border-color: var(--cyan); }
+.arch-skipped { opacity: 0.55; }
 .arch-id { font-weight: 600; white-space: nowrap; min-width: 30px; }
 .arch-date { color: var(--muted); font-size: 12.5px; white-space: nowrap; min-width: 46px; }
 .arch-sect {

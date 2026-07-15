@@ -35,17 +35,29 @@ export default function Archive({ today, incidents }) {
       <main className="feed">
         {days.length > 0 && (
           <ul className="arch-list">
-            {days.map((n) => (
-              <li key={n}>
-                <Link className="arch-row" href={n === todayNum ? "/" : `/a/${n + 1}`}>
-                  <span className="arch-id">#{n + 1}</span>
-                  <span className="arch-date">
-                    {n === todayNum ? "today" : fmtShort(addDays(DAILY_EPOCH, n))}
-                  </span>
-                  {runStatus(idByNum.has(n + 1) ? loadRun(idByNum.get(n + 1)) : null)}
-                </Link>
-              </li>
-            ))}
+            {days.map((n) => {
+              // the payload carries every arrived num, so a day absent from it
+              // was skipped — nothing to play, render an unlinked all-clear row
+              const id = idByNum.get(n + 1);
+              const date = n === todayNum ? "today" : fmtShort(addDays(DAILY_EPOCH, n));
+              return (
+                <li key={n}>
+                  {id ? (
+                    <Link className="arch-row" href={n === todayNum ? "/" : `/a/${n + 1}`}>
+                      <span className="arch-id">#{n + 1}</span>
+                      <span className="arch-date">{date}</span>
+                      {runStatus(loadRun(id))}
+                    </Link>
+                  ) : (
+                    <div className="arch-row arch-skipped">
+                      <span className="arch-id">#{n + 1}</span>
+                      <span className="arch-date">{date}</span>
+                      <span className="arch-status">all clear</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
         {customs.length > 0 && (
