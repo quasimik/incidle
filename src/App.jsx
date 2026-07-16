@@ -5,9 +5,10 @@ import { setSchedule } from "./runs.js";
 import Game from "./Game.jsx";
 import Archive from "./Archive.jsx";
 
-// Loader shell: the game is unplayable without the answer list and the
-// incident pool, so hold at a boot screen until both fetches land (or offer
-// a retry if they don't).
+// Loader shell: the game is unplayable without the answer list and the daily
+// schedule, so hold at a boot screen until both fetches land (or offer a
+// retry if they don't). Incident content isn't in either — LoadedGame fetches
+// it by id once a route needs it.
 export default function Incidle() {
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -67,7 +68,16 @@ function App({ answers, incidents }) {
     // day URL so they see (and share) it as the daily it now is.
     const promoted = incidents.find((inc) => inc.id === route.id);
     if (promoted) return <RedirectTo path={`/a/${promoted.num}`} />;
-    return <CustomGame answers={answers} id={route.id} />;
+    return (
+      <LoadedGame
+        key={route.id}
+        answers={answers}
+        id={route.id}
+        sub={route.id}
+        shareTag={`incidle ${route.id}`}
+        shareUrl={`https://incidle.com/a/${route.id}`}
+      />
+    );
   }
 
   const n = route.view === "day" ? route.num - 1 : todayNum;
@@ -76,24 +86,36 @@ function App({ answers, incidents }) {
   // itself, so a gap in the numbering is simply a day with no incident, which
   // Game renders as an all-clear page (a real page, not a redirect, so the
   // URL stays inspectable).
-  const incident = incidents.find((inc) => inc.num === n + 1) ?? null;
+  const id = incidents.find((inc) => inc.num === n + 1)?.id;
+  const sub = n === todayNum ? null : fmtShort(addDays(DAILY_EPOCH, n));
+  if (!id)
+    return (
+      <Game
+        key={`d${n}`}
+        answers={answers}
+        incident={null}
+        title={n === todayNum ? "INCIDLE" : `INCIDLE #${n + 1}`}
+        sub={sub}
+        shareTag={`incidle #${n + 1}`}
+      />
+    );
   return (
-    <Game
+    <LoadedGame
       key={`d${n}`}
       answers={answers}
-      incident={incident}
-      title={!incident && n === todayNum ? "INCIDLE" : `INCIDLE #${n + 1}`}
-      sub={n === todayNum ? null : fmtShort(addDays(DAILY_EPOCH, n))}
+      id={id}
+      title={`INCIDLE #${n + 1}`}
+      sub={sub}
       shareTag={`incidle #${n + 1}`}
-      storageKey={incident?.id}
     />
   );
 }
 
-// A custom incident is never in the boot payload (see api/incidents.js), so
-// fetch it by id when its link is opened. A bad or deleted id lands on a
-// dead-end screen rather than a redirect, so the URL stays inspectable.
-function CustomGame({ answers, id }) {
+// Every playable incident, daily or custom, loads by id from /api/incident
+// when its route is opened — the boot payload is just the schedule and
+// carries no content. A bad or deleted id lands on a dead-end screen rather
+// than a redirect, so the URL stays inspectable.
+function LoadedGame({ answers, id, ...gameProps }) {
   const [incident, setIncident] = useState(null);
   const [failed, setFailed] = useState(null); // "missing" | "network"
   const [attempt, setAttempt] = useState(0);
@@ -137,17 +159,7 @@ function CustomGame({ answers, id }) {
         </div>
       </div>
     );
-  return (
-    <Game
-      key={id}
-      answers={answers}
-      incident={incident}
-      sub={id}
-      shareTag={`incidle ${id}`}
-      shareUrl={`https://incidle.com/a/${id}`}
-      storageKey={id}
-    />
-  );
+  return <Game answers={answers} incident={incident} storageKey={id} {...gameProps} />;
 }
 
 function RedirectTo({ path }) {
