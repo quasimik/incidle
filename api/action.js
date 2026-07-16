@@ -2,14 +2,29 @@ import { neon } from "@neondatabase/serverless";
 import { HOURS } from "../src/rules.js";
 
 // ---------------------------------------------------------------------------
-// Server-side verdicts. The incident payloads no longer carry answerIds /
-// nearIds / postmortem (see api/incidents.js), so the client can't grade its
-// own guesses: every guess lands here, and the reveal ({ answerIds,
-// postmortem, author?, inspiration? }) ships only when the run ends — a
-// solve, or any request marked with the budget's last hour. guessId null
-// asks for the reveal alone (an investigate burning the final hour). The
-// credits ride the reveal rather than the incident payload because the
-// inspiration names the real-world outage — a giveaway pre-verdict.
+// Every hour-burning move lands here; the response is whatever the move
+// yields. The incident payloads carry nothing a player hasn't paid for — no
+// answerIds / nearIds / postmortem, and no clue text (see api/incidents.js)
+// — so the client can neither grade its own guesses nor show a clue without
+// asking:
+//
+//   { guessId } → { verdict }            a hypothesis test
+//   { clue: n } → { clues }              an observation — clues[0..n], a
+//                                        prefix so a legacy run can backfill
+//                                        every text it has earned in one call
+//
+// Any move on a run that ends it — a solve, or any request marked with the
+// budget's last hour — additionally gets the reveal: { answerIds, postmortem,
+// author?, inspiration? } plus the FULL clue list, which the client saves
+// into the run so finished runs are self-contained (feed replay and the
+// skipped-observations list never ask again). The credits ride the reveal
+// rather than the incident payload because the inspiration names the
+// real-world outage — a giveaway pre-verdict.
+//
+// Nothing here checks that hour n was honestly reached — hour, clue index,
+// actions and player are all client-asserted. Anti-spoiler, not anti-cheat
+// (see the key paragraph below): the point is that unpaid content never
+// rides a payload, not that a determined client can't POST for it.
 //
 // answer_ids is an accept-set in descending order of goodness: any member
 // solves, and the reveal ships the whole ranked list — the client shows every
@@ -57,14 +72,14 @@ export default async function handler(req, res) {
     res.status(405).json({ error: "method not allowed" });
     return;
   }
-  const { key, guessId, hour, player, actions, guesses } = req.body ?? {};
+  const { key, guessId, clue, hour, player, actions, guesses } = req.body ?? {};
   if (!(typeof key === "string" && /^ic_[a-z0-9]{8}$/.test(key))) {
     res.status(400).json({ error: "bad key" });
     return;
   }
   const sql = neon(process.env.DATABASE_URL);
   const rows = await sql`
-    SELECT answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
+    SELECT clues, answer_ids AS "answerIds", near_ids AS "nearIds", postmortem, author, inspiration
     FROM incidents WHERE id = ${key}`;
   if (rows.length === 0) {
     res.status(404).json({ error: "not found" });
@@ -76,7 +91,11 @@ export default async function handler(req, res) {
     out.verdict =
       inc.answerIds.includes(guessId) ? "solve" : inc.nearIds?.includes(guessId) ? "near" : "wrong";
   }
+  if (Number.isInteger(clue) && clue >= 0) {
+    out.clues = inc.clues.slice(0, clue + 1); // slice caps an over-ask at the full list
+  }
   if (out.verdict === "solve" || (Number.isInteger(hour) && hour >= HOURS)) {
+    out.clues = inc.clues; // the whole list — the run keeps it once finished
     out.answerIds = inc.answerIds;
     out.postmortem = inc.postmortem;
     if (inc.author) out.author = inc.author;

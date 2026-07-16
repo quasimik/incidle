@@ -1,8 +1,10 @@
 // ---------------------------------------------------------------------------
 // SAVED RUNS — one localStorage entry per incident: { s: status, a: actions,
 // g: guessed ids in order (the solving guess included), t: started-at ms,
-// r: reveal ({ answerIds: accepted causes best-first, postmortem }, present
-// once the run ends) }, keyed by the incident's ic_ id — always, dailies
+// c: clue texts paid for so far (the full list once the run ends — payloads
+// don't carry clues, so the run is the only client-side copy), r: reveal
+// ({ answerIds: accepted causes best-first, postmortem }, present once the
+// run ends) }, keyed by the incident's ic_ id — always, dailies
 // included. The id is the incident's one identity; a daily's num is schedule
 // metadata resolved through the boot payload (setSchedule below), never
 // written into an entry. So promoting a custom to a daily moves nothing: the
@@ -26,7 +28,7 @@ export function mergeSchedule(entries) {
 }
 
 // This browser's persistent player id, minted ic_-style on first need and
-// carried on every /api/guess call: the server's plays log (global
+// carried on every run-ending /api/action call: the server's plays log (global
 // per-incident stats) keys on (incident, player), so a browser counts once
 // per incident however many retries or reloads happen. Client-asserted and
 // not a capability — nothing is readable by it; accounts will swap in a

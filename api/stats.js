@@ -2,7 +2,7 @@ import { neon } from "@neondatabase/serverless";
 import { HOURS } from "../src/rules.js";
 
 // ---------------------------------------------------------------------------
-// GLOBAL PER-INCIDENT STATS, aggregated from the plays table that api/guess.js
+// GLOBAL PER-INCIDENT STATS, aggregated from the plays table that api/action.js
 // writes when a run ends. key is the incident's ic_ id, like everywhere else
 // — so a shared custom's stats are reachable only by whoever holds its link,
 // same capability stance as the incident itself, and a promotion (custom
