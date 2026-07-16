@@ -3,9 +3,10 @@ import { listDailyRuns } from "./runs.js";
 
 // ---------------------------------------------------------------------------
 // PERSONAL STATS — computed from this device's saved runs, Wordle-style: no
-// account, no server. Everything counts dailies only; specials (ic_) don't
-// figure in. A run counts once it's finished — in-progress runs are
-// invisible here.
+// account, no server. Everything counts dailies only — runs whose incident
+// is on the daily schedule (runs.js resolves that against the boot payload);
+// unscheduled specials don't figure in. A run counts once it's finished —
+// in-progress runs are invisible here.
 //
 // The distinctive axis of this game is explore vs. exploit — when a player
 // stops investigating and starts naming culprits — so past the counts, the
@@ -22,10 +23,10 @@ export function computeStats() {
 
   // what happened at each hour T+1…T+HOURS across all finished runs — a run
   // that ended early just isn't counted in the hours after its solve
-  const hours = Array.from({ length: HOURS }, () => ({ obs: 0, guess: 0, solve: 0 }));
+  const hours = Array.from({ length: HOURS }, () => ({ obs: 0, wrong: 0, near: 0, solve: 0 }));
   for (const { run } of finished)
     run.a.forEach((act, i) => {
-      hours[i][act === "obs" ? "obs" : act === "solve" ? "solve" : "guess"]++;
+      if (hours[i][act] !== undefined) hours[i][act]++;
     });
 
   const avg = (f) =>

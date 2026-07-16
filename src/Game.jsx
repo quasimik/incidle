@@ -1,7 +1,8 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { Fragment, useState, useMemo, useRef, useEffect } from "react";
 import { HOURS } from "./rules.js";
 import { buildMatcher } from "./matcher.js";
-import { loadRun, saveRun } from "./runs.js";
+import { loadRun, saveRun, getPlayerId } from "./runs.js";
+import { DEV } from "./dev.js";
 import Header from "./Header.jsx";
 import { highlight, rich } from "./text.jsx";
 
@@ -19,11 +20,12 @@ const TAG = {
   escalate: { label: "ESCALATED", cls: "tag-escalate" },
 };
 
-// Server-side verdict: the incident payload carries nothing answer-derived,
-// so every guess is graded by POST /api/guess (guessId null just fetches the
-// reveal — see that file).
-async function postGuess(body) {
-  const r = await fetch("/api/guess", {
+// Every hour-burning move goes to the server: the incident payload carries
+// nothing a player hasn't paid for — no answers, no clue text — so guesses
+// are graded and clues served by POST /api/action (see that file for the
+// request/response shapes).
+async function postAction(body) {
+  const r = await fetch("/api/action", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -32,21 +34,70 @@ async function postGuess(body) {
   return r.json();
 }
 
+// The slice of a run-ending /api/action response that gets kept (in state and
+// in the saved run) as the reveal. author/inspiration are the postmortem's
+// credit line; absent for uncredited incidents — and for runs saved before
+// credits existed, which is why the credit render guards on them. The full
+// clue list rides the same response but is kept separately (run.c).
+function toReveal(r) {
+  return { answerIds: r.answerIds, postmortem: r.postmortem, author: r.author, inspiration: r.inspiration };
+}
+
+// "42 responders: 62% resolved · mean solve T+4.3", then on its own line
+// "top guesses: connection pool exhaustion 62% · cache stampede 31% · dns
+// failure 17%" — or a first-responder nod when the log holds only this play.
+// Mean is over solved plays. The top list ranks every guessed id — correct
+// ones included, each accepted member under its own name (api/stats.js does
+// the counting); percentages are shares of responders, an id needs 2+ votes
+// so one stray guess isn't billed as a crowd trend, and entries this player
+// also guessed take their color from the player's own verdict on them —
+// red wrong, amber near, green solve (mine maps guessed id → verdict).
+function crowdLine(stats, answerById, mine) {
+  if (stats.played === 1) return "you're the first responder on this incident.";
+  const parts = [`${Math.round((stats.solved / stats.played) * 100)}% resolved`];
+  if (stats.solved > 0) {
+    // hours[i] counts solves at T+(i+1) — see api/stats.js
+    const spent = stats.hours.reduce((sum, n, i) => sum + n * (i + 1), 0);
+    parts.push(`mean solve T+${(spent / stats.solved).toFixed(1)}`);
+  }
+  const top = (stats.top ?? [])
+    .filter((t) => t.n >= 2 && answerById[t.id]?.name)
+    .slice(0, 3)
+    .map((t) => {
+      const text = `${answerById[t.id].name} ${Math.round((100 * t.n) / stats.played)}%`;
+      const v = mine[t.id];
+      return v ? <span key={t.id} className={`post-stats-${v}`}>{text}</span> : text;
+    });
+  const line = `${stats.played} responders: ${parts.join(" · ")}`;
+  if (top.length === 0) return line;
+  return (
+    <>
+      {line}
+      <br />
+      top guesses: {top.flatMap((t, i) => (i > 0 ? [" · ", t] : [t]))}
+    </>
+  );
+}
+
 // Rebuild a feed from a saved run — the inverse of handleInvestigate /
-// handleGuess. "obs" consumes the next clue, "near"/"wrong" the next saved
-// guess id; the resolve/escalate lines name the answer from the run's stored
-// reveal (the rare finished run without one renders "…" and no postmortem).
+// handleGuess. "obs" consumes the next clue text from run.c (the payload
+// doesn't carry clues; the run stores every text it has paid for),
+// "near"/"wrong"/"solve" the next saved guess id — the resolve line names
+// the guess that solved it, which may be an accepted answer other than the
+// best one. A run missing texts (saved before clues moved server-side)
+// renders "…" until the backfill effect fetches them; the rare finished run
+// without a reveal renders "…" and no postmortem.
 function rebuildFeed(inc, run, answerById) {
   const feed = [{ type: "page", time: "T+0", text: inc.vignette }];
-  const revealName = answerById[run.r?.answerId]?.name ?? "…";
+  const bestName = answerById[run.r?.answerIds?.[0]]?.name ?? "…";
   let clue = 0;
   let gi = 0;
   run.a.forEach((act, i) => {
     const time = `T+${i + 1}`;
     if (act === "obs") {
-      feed.push({ type: "clue", time, text: inc.clues[clue++] });
+      feed.push({ type: "clue", time, text: run.c?.[clue++] ?? "…" });
     } else if (act === "solve") {
-      feed.push({ type: "resolve", time, text: revealName });
+      feed.push({ type: "resolve", time, text: answerById[run.g[gi++]]?.name ?? bestName });
     } else {
       const id = run.g[gi++];
       const name = answerById[id]?.name ?? id;
@@ -58,7 +109,7 @@ function rebuildFeed(inc, run, answerById) {
     }
   });
   if (run.s === "failed")
-    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${revealName}.` });
+    feed.push({ type: "escalate", time: "", text: `Postmortem identifies: ${bestName}.` });
   return feed;
 }
 
@@ -85,8 +136,13 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   // resume this incident's saved run — finished or mid-game — if one exists
   const [saved] = useState(() => loadRun(storageKey));
   const [startedAt] = useState(() => saved?.t ?? Date.now());
-  // { answerId, postmortem } — arrives from /api/guess when the run ends
+  // { answerIds, postmortem, author?, inspiration? } — arrives from
+  // /api/action when the run ends; answerIds is every accepted cause in
+  // descending order of goodness
   const [reveal, setReveal] = useState(() => saved?.r ?? null);
+  // clue texts this run has paid for, in reveal order — served one at a time
+  // by /api/action, the full list once the run ends (skipped ones included)
+  const [clues, setClues] = useState(() => saved?.c ?? []);
   const [feed, setFeed] = useState(() =>
     saved ? rebuildFeed(c, saved, answerById) : [{ type: "page", time: "T+0", text: c.vignette }]
   );
@@ -99,12 +155,13 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false); // a verdict request is in flight
   const [netFail, setNetFail] = useState(false);
+  const [crowd, setCrowd] = useState(null); // global per-incident stats, fetched once the play ends
   const [overlayUp, setOverlayUp] = useState(false); // a header modal is covering the page
   const feedEndRef = useRef(null);
   const inputRef = useRef(null);
   const lastGuessAt = useRef(0); // absorbs double-enter after a guess submits
 
-  const maxClues = c.clues.length;
+  const maxClues = c.clueCount;
   const revealed = actions.filter((a) => a === "obs").length;
   const hoursUsed = actions.length;
   const { items: suggestions, more } = useMemo(() => matchAnswers(query), [query, matchAnswers]);
@@ -118,9 +175,50 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       a: actions,
       g: guessedIds,
       t: startedAt,
+      ...(clues.length > 0 && { c: clues }),
       ...(reveal && { r: reveal }),
     });
-  }, [storageKey, status, actions, guessedIds, startedAt, reveal]);
+  }, [storageKey, status, actions, guessedIds, startedAt, clues, reveal]);
+
+  // how everyone else did — spoiler-safe only after the verdict, so nothing
+  // is requested while the run is live. Best-effort: no strip on failure.
+  useEffect(() => {
+    if (status === "active") return;
+    let alive = true;
+    fetch(`/api/stats?key=${storageKey}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => alive && s?.played > 0 && setCrowd(s))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [status, storageKey]);
+
+  // LEGACY BACKFILL (delete once pre-server-clue clients age out; shipped
+  // 2026-07-15). Runs saved before clues moved server-side hold no c, so the
+  // feed above rebuilt with "…" placeholders. Fetch every text the run has
+  // earned — the revealed prefix mid-game, everything once finished (the
+  // skipped list shows the rest) — rebuild, and let the persist effect heal
+  // the saved entry. Best-effort: on failure the placeholders stand and the
+  // next visit retries. Everything read here is fixed for a mount (Game is
+  // keyed by incident), so this runs once.
+  useEffect(() => {
+    if (!saved || saved.c) return;
+    const earned = saved.s === "active" ? saved.a.filter((a) => a === "obs").length : maxClues;
+    if (earned === 0) return;
+    let alive = true;
+    postAction({ key: storageKey, clue: earned - 1 })
+      .then((r) => {
+        if (!alive) return;
+        setClues(r.clues);
+        setFeed(rebuildFeed(c, { ...saved, c: r.clues }, answerById));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: "end" });
@@ -158,7 +256,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setReveal(rev);
     setFeed([
       ...newFeed,
-      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerId]?.name}.` },
+      { type: "escalate", time: "", text: `Postmortem identifies: ${answerById[rev.answerIds[0]]?.name}.` },
     ]);
     setStatus("failed");
   }
@@ -166,20 +264,23 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   async function handleInvestigate() {
     if (busy || status !== "active" || revealed >= maxClues) return;
     const hour = actions.length + 1;
-    const entry = { type: "clue", time: eventTime(hour), text: c.clues[revealed] };
-    if (hour < HOURS) {
-      setActions([...actions, "obs"]);
-      setFeed([...feed, entry]);
-      focusInput(); // a button click shouldn't strand focus off the input
-      return;
-    }
-    // the last hour: clues are local, but the escalation reveal is not
     setNetFail(false);
     setBusy(true);
     try {
-      const r = await postGuess({ key: storageKey, hour });
+      const body = { key: storageKey, clue: revealed, hour };
+      if (hour >= HOURS) {
+        // this observation ends the run — the same request carries what the
+        // play log needs, and the response carries the escalation reveal
+        body.player = getPlayerId();
+        body.actions = actions;
+        body.guesses = guessedIds;
+      }
+      const r = await postAction(body);
+      const entry = { type: "clue", time: eventTime(hour), text: r.clues[revealed] };
+      setClues(r.clues);
       setActions([...actions, "obs"]);
-      finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+      if (hour >= HOURS) finishEscalate([...feed, entry], toReveal(r));
+      else setFeed([...feed, entry]);
     } catch {
       setNetFail(true); // the hour isn't burned; the button retries
     }
@@ -194,7 +295,14 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setBusy(true);
     let r;
     try {
-      r = await postGuess({ key: storageKey, guessId: ans.id, hour });
+      r = await postAction({
+        key: storageKey,
+        guessId: ans.id,
+        hour,
+        player: getPlayerId(),
+        actions,
+        guesses: guessedIds,
+      });
     } catch {
       setNetFail(true);
       setBusy(false);
@@ -206,8 +314,14 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     setSelIdx(0);
     const t = eventTime(hour);
     setActions([...actions, r.verdict]);
+    // every guess lands in g, the solve included — the saved run holds the
+    // full sequence, and rebuildFeed names the solving guess from it
+    setGuessedIds([...guessedIds, ans.id]);
+    // the full clue list rides every run-ending response; the saved run keeps
+    // it so the feed replay and the skipped-observations list never ask again
+    if (r.clues) setClues(r.clues);
     if (r.verdict === "solve") {
-      setReveal({ answerId: r.answerId, postmortem: r.postmortem });
+      setReveal(toReveal(r));
       setFeed([...feed, { type: "resolve", time: t, text: `${ans.name}` }]);
       setStatus("solved");
       return;
@@ -216,8 +330,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
       r.verdict === "near"
         ? { type: "near", time: t, text: `${ans.name} — directionally right, but not the best answer.` }
         : { type: "reject", time: t, text: `${ans.name}` };
-    setGuessedIds([...guessedIds, ans.id]);
-    if (hour >= HOURS) finishEscalate([...feed, entry], { answerId: r.answerId, postmortem: r.postmortem });
+    if (hour >= HOURS) finishEscalate([...feed, entry], toReveal(r));
     else setFeed([...feed, entry]);
   }
 
@@ -255,7 +368,7 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
   }
 
   function shareText() {
-    const sq = { obs: "🟦", wrong: "🟥", near: "🟥", solve: "🟩" };
+    const sq = { obs: "🟦", wrong: "🟥", near: "🟧", solve: "🟩" };
     const squares = actions.map((a) => sq[a]).join("") + "⬜".repeat(HOURS - hoursUsed);
     const verdict = status === "solved" ? `resolved at T+${hoursUsed}` : "escalated!";
     // customs are reachable only by their link, so the share must carry it;
@@ -281,6 +394,16 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
     } else {
       copyShare();
     }
+  }
+
+  // dev/preview-only: forget this incident's saved run and start over. Local
+  // state only — the server's plays row (keyed on incident+player) survives,
+  // so replays never re-count in the crowd stats.
+  function resetRun() {
+    try {
+      localStorage.removeItem(`incidle:run:${storageKey}`);
+    } catch {}
+    location.reload();
   }
 
   const done = status !== "active";
@@ -324,31 +447,44 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
           </div>
         ))}
 
+        {done && revealed < maxClues && clues.length > revealed && (
+          <details className="unseen">
+            <summary className="unseen-summary">
+              {maxClues - revealed} skipped observation{maxClues - revealed === 1 ? "" : "s"}
+            </summary>
+            <ul className="unseen-list">
+              {clues.slice(revealed).map((cl, i) => (
+                <li key={i} className="entry entry-clue">
+                  <span className="time" />
+                  <span className="tag tag-clue">SKIPPED</span>
+                  <span className="text">{rich(cl)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         {done && (() => {
-          const ans = answerById[reveal?.answerId];
+          // every accepted cause, best first — one well: the best answer gets
+          // the target treatment, the rest repeat the head/body pair below it
+          // in a quieter voice
+          const accepted = (reveal?.answerIds ?? []).map((id) => answerById[id]).filter(Boolean);
           return (
           <div className="post">
             <div className="post-head">POSTMORTEM</div>
-            {revealed < maxClues && (
-              <details className="unseen">
-                <summary className="unseen-summary">
-                  {maxClues - revealed} unrevealed observation{maxClues - revealed === 1 ? "" : "s"}
-                </summary>
-                <ul className="unseen-list">
-                  {c.clues.slice(revealed).map((cl, i) => (
-                    <li key={i}>{rich(cl)}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-            {ans?.description && (
+            {accepted.length > 0 && (
               <div className="callout">
                 <span className="callout-icon">🎯</span>
-                <div className="callout-head">Root cause: {ans.name}</div>
-                <p className="callout-body">{rich(ans.description)}</p>
+                <div className="callout-head">Root cause: {accepted[0].name}</div>
+                {accepted[0].description && <p className="callout-body">{rich(accepted[0].description)}</p>}
+                {accepted.slice(1).map((ans) => (
+                  <Fragment key={ans.id}>
+                    <div className="callout-head callout-alt-head">Accepted: {ans.name}</div>
+                    {ans.description && <p className="callout-body callout-also">{rich(ans.description)}</p>}
+                  </Fragment>
+                ))}
               </div>
             )}
-            {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
             <div className="post-actions">
               <button className="btn btn-ghost" onClick={copyShare}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -367,9 +503,65 @@ function Run({ answers, incident: c, title = "INCIDLE", sub, shareTag, shareUrl,
                 share
               </button>
             </div>
+            {reveal?.postmortem && <p className="post-body">{rich(reveal.postmortem)}</p>}
+            {crowd && (() => {
+              // this player's verdict per guessed id — guessedIds align with
+              // the wrong/near entries of actions, in order (see api/action.js)
+              const verdicts = actions.filter((a) => a === "wrong" || a === "near");
+              const mine = {};
+              guessedIds.forEach((id, i) => { mine[id] = verdicts[i] ?? "wrong"; });
+              // on a solve, g's last entry is the solving guess (no wrong/near
+              // verdict to pair with) — it may be any accepted member, not [0]
+              if (status === "solved" && guessedIds.length > 0) mine[guessedIds[guessedIds.length - 1]] = "solve";
+              return <p className="post-stats">{crowdLine(crowd, answerById, mine)}</p>;
+            })()}
+            {(reveal?.author?.text || reveal?.inspiration) && (
+              <p className="post-credit">
+                {reveal.author?.text && (
+                  <>
+                    guest contribution by{" "}
+                    {reveal.author.url ? (
+                      <a
+                        className="credit-link"
+                        href={reveal.author.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {reveal.author.text}
+                      </a>
+                    ) : (
+                      reveal.author.text
+                    )}
+                  </>
+                )}
+                {reveal.author?.text && reveal.inspiration && " · "}
+                {reveal.inspiration && (
+                  <>
+                    inspired by{" "}
+                    {reveal.inspiration.url ? (
+                      <a
+                        className="credit-link"
+                        href={reveal.inspiration.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {reveal.inspiration.text}
+                      </a>
+                    ) : (
+                      reveal.inspiration.text
+                    )}
+                  </>
+                )}
+              </p>
+            )}
           </div>
           );
         })()}
+        {DEV && hoursUsed > 0 && (
+          <button className="dev-reset" onClick={resetRun}>
+            ⟲ reset this incident (dev)
+          </button>
+        )}
         <div ref={feedEndRef} />
       </main>
 

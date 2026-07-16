@@ -189,7 +189,7 @@ export default function Header({ title = "INCIDLE", sub, right, onHelpDismiss, o
           >
             <div className="about-spark">✨</div>
             <p className="about-line">made by michael</p>
-            <p className="about-line">in san francisco</p>
+            <p className="about-line">in foggy san francisco</p>
             <a className="about-link" href="https://mic.hael.me" target="_blank" rel="noopener noreferrer">
               mic.hael.me
             </a>

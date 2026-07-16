@@ -13,11 +13,13 @@ function runStatus(run) {
   return <span className="arch-status arch-progress">T+{run.a.length} · in progress</span>;
 }
 
-export default function Archive({ today, dailyCount }) {
+export default function Archive({ today, incidents }) {
   const todayNum = Math.max(0, dayNumber(today));
+  // runs are keyed by incident id (runs.js), so a day's status needs its id
+  const idByNum = new Map(incidents.map((inc) => [inc.num, inc.id]));
   // no dailies scheduled → no calendar rows to offer
   const days =
-    dailyCount > 0 ? Array.from({ length: todayNum + 1 }, (_, i) => todayNum - i) : [];
+    incidents.length > 0 ? Array.from({ length: todayNum + 1 }, (_, i) => todayNum - i) : [];
   // customs appear here the moment a run for them exists locally
   const customs = listCustomRuns();
   return (
@@ -33,17 +35,29 @@ export default function Archive({ today, dailyCount }) {
       <main className="feed">
         {days.length > 0 && (
           <ul className="arch-list">
-            {days.map((n) => (
-              <li key={n}>
-                <Link className="arch-row" href={n === todayNum ? "/" : `/a/${n + 1}`}>
-                  <span className="arch-id">#{n + 1}</span>
-                  <span className="arch-date">
-                    {n === todayNum ? "today" : fmtShort(addDays(DAILY_EPOCH, n))}
-                  </span>
-                  {runStatus(loadRun(n + 1))}
-                </Link>
-              </li>
-            ))}
+            {days.map((n) => {
+              // the payload carries every arrived num, so a day absent from it
+              // was skipped — nothing to play, render an unlinked all-clear row
+              const id = idByNum.get(n + 1);
+              const date = n === todayNum ? "today" : fmtShort(addDays(DAILY_EPOCH, n));
+              return (
+                <li key={n}>
+                  {id ? (
+                    <Link className="arch-row" href={n === todayNum ? "/" : `/a/${n + 1}`}>
+                      <span className="arch-id">#{n + 1}</span>
+                      <span className="arch-date">{date}</span>
+                      {runStatus(loadRun(id))}
+                    </Link>
+                  ) : (
+                    <div className="arch-row arch-skipped">
+                      <span className="arch-id">#{n + 1}</span>
+                      <span className="arch-date">{date}</span>
+                      <span className="arch-status">all clear</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
         {customs.length > 0 && (

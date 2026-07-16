@@ -1,11 +1,21 @@
 // ---------------------------------------------------------------------------
-// DAILY SCHEDULE — day #1 is DAILY_EPOCH; day numbers count local calendar
-// days from it. All date math runs at local noon so DST shifts can't move a
-// day boundary.
+// DAILY SCHEDULE — day #1 is DAILY_EPOCH; day numbers count SF (America/
+// Los_Angeles) calendar days from it. The day flips at SF midnight for
+// everyone: the server refuses to serve days beyond SF-today (api/incidents
+// gates the payload), so "today" has to mean one thing globally — a
+// client-local boundary would let clocks disagree with the gate. Date math on
+// the strings runs at noon so DST shifts can't move a day boundary. Shared by
+// the client and the api/ functions.
 // ---------------------------------------------------------------------------
 export const DAILY_EPOCH = "2026-07-07";
 
-export function toDateStr(d) {
+// en-CA formats as YYYY-MM-DD
+const SF_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
+export function todayStr() {
+  return SF_DAY.format(new Date());
+}
+
+function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function localNoon(dateStr) {
