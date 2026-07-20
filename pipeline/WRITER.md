@@ -42,6 +42,33 @@ causal chain. Your job starts at "write the causal chain honestly":
   provided. Private or fictional sources get no `inspiration` — a credit
   that points at nothing is worse than none.
 
+## Calibrating your self-test
+
+Two systematic biases to correct for when you run AUTHORING.md's self-test —
+both observed in playtesting:
+
+- **You will overestimate your misdirection.** A cold LLM player discounts
+  narrative blame ("support says the vendor is slow") almost entirely and
+  reads structure. Weight the topology's *mechanical* description far more
+  than the vignette's framing when predicting the cold posterior — a red
+  herring that only lives in what characters say is barely a red herring.
+- **The topology needs mechanical breadth, not just balanced phrasing.** If
+  it only describes the failing subsystem, equal-salience wording can't
+  save it: every candidate a reader forms lives in the same neighborhood as
+  the answer. Give several catalog rows a real mechanical foothold —
+  peer subsystems described at the same depth as the one that breaks.
+
+Your self-test is a prediction; the cold playtest is the measurement. If
+they disagree, the playtest wins.
+
+## Revision requests
+
+If the playtest flags your draft, you'll get a diagnosis: the players'
+pre-clue candidate rankings, the confidence curve across reveals, and which
+clue collapsed it. Make the smallest edits that fix the measured problem —
+the story and clue structure survived; only the cold posterior was off.
+Return the same output format (full incident JSON + updated worksheet).
+
 ## Output
 
 Return two things:

@@ -1,9 +1,20 @@
 # Story → incident pipeline
 
 Turns a source story into a seeded Incidle incident, with a cold LLM playtest
-producing a difficulty score. Runs manually today (an orchestrating Claude
-session spawning subagents); designed so the same prompts and protocol can
-later back an in-app "submit incident" feature driven by the Claude API.
+producing a difficulty score.
+
+**The orchestrator is code, not a model.** The pipeline is a deterministic
+state machine (`run.mjs`) making Claude API calls to exactly two model roles —
+one writer conversation, K fresh player conversations. Validation,
+adjudication, scoring, the revision trigger, and the iteration cap are all
+plain code: the players' strict per-turn JSON makes adjudication string
+comparison, and the revision "diagnosis" is templated from their structured
+output. This keeps the measurement instrument fixed (the only nondeterminism
+is in the two roles being measured) and keeps untrusted submitted stories
+confined to string-templating — no overseer agent reading them with tools.
+The same state machine can be run by hand in a Claude session with subagents
+(the manual mode below); either way it's the same protocol, so today's manual
+runs and a future in-app "submit incident" feature share one code path.
 
 ## Stages
 
@@ -29,8 +40,16 @@ later back an in-app "submit incident" feature driven by the Claude API.
    (81 rows ≈ 3.5k tokens — no autocomplete simulation needed), topology +
    vignette, then takes one action per turn; the orchestrator adjudicates
    with the real game rules and reveals only what the action earns.
-5. **Score** — see below. Human review of draft + score, then seed to
-   staging as a custom and play at `/a/<id>` on the preview.
+5. **Score** — see below.
+6. **Revision loop** — if the playtest leak-flags the draft or difficulty is
+   out of band, send the writer (same conversation, context intact) a
+   diagnosis templated from the players' structured output: pre-clue top-3s,
+   the confidence curve, which clue collapsed it. The writer makes minimal
+   edits (per WRITER.md → Revision requests); re-validate and re-playtest
+   with **fresh** players (never ones who saw the previous version). Cap at
+   2 cycles; a draft still failing goes to human review, not iteration 3.
+7. Human review of draft + worksheet + score, then seed to staging as a
+   custom and play at `/a/<id>` on the preview.
 
 ## Scoring
 
@@ -53,19 +72,44 @@ Interpretation (to be calibrated against the live set): ≲2 easy, 3–5 the
 sweet spot, 6 brutal, 7 broken-or-diabolical. A low score with no leak flag
 can still be fine — some incidents are meant to be gettable.
 
-## Running it manually
+## Running it
+
+The primary path is the code orchestrator (needs `DATABASE_URL` for the
+catalog and Claude API credentials — `ANTHROPIC_API_KEY` or an `ant auth
+login` profile):
 
 ```
-node pipeline/fetch-catalog.mjs > /tmp/catalog_compact.txt   # needs DATABASE_URL
+set -a && source .env.local && set +a
+node pipeline/run.mjs job.json            # --runs 3 --max-revisions 2 --out pipeline/out
 ```
 
-Then, in an orchestrating Claude session:
+`job.json` is the input package:
+
+```json
+{
+  "sourceFile": "sample_input.md",        // or "sourceText": "…"
+  "attribution": { "text": "handle", "url": "https://…" },   // optional
+  "public": false,                        // true → writer may add inspiration
+  "inspiration": { "text": "…", "url": "https://…" }         // optional, public only
+}
+```
+
+Output lands in `pipeline/out/<slug>/` (gitignored): `incident.json`,
+`worksheet.md`, `runs.json`, `report.md`. Models: writer `claude-opus-4-8`,
+player `claude-sonnet-5` — the player model is deliberately fixed so
+difficulty scores stay comparable across incidents; don't casually upgrade it.
+
+**Manual mode** — the same state machine executed by hand in a Claude
+session (useful when iterating on the prompts themselves):
 1. Assemble the input package (fetch any links yourself).
 2. Spawn the writer subagent with AUTHORING.md, WRITER.md, the catalog,
-   and the input package. Keep its worksheet.
+   and the input package. Keep its worksheet, and keep the agent — a
+   revision goes back to the *same* writer with its context intact.
 3. Validate ids and lengths.
 4. Spawn a fresh player subagent per run with the PLAYER.md preamble; hold
-   the answer key yourself and adjudicate turn by turn. The player must
-   never see incident files, the worksheet, or the repo.
-5. Compute the score, present draft + worksheet + runs + score for human
+   the answer key yourself and adjudicate turn by turn, exactly by the
+   rules — paste clues verbatim, never paraphrase. The player must never
+   see incident files, the worksheet, or the repo.
+5. Compute the score; on leak/out-of-band, run the revision loop (fresh
+   players, cap 2); present draft + worksheet + runs + score for human
    review before seeding.

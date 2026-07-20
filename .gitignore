@@ -7,3 +7,4 @@ dist
 # answer + incident data lives in Neon now; local copies are just seed/authoring input
 incident_root_causes.json
 incidents.json
+pipeline/out
