@@ -25,11 +25,18 @@ causal chain. Your job starts at "write the causal chain honestly":
 
 - Invent replacements for anything identifying: companies, products,
   people, team names, internal project/feature names.
-- Ubiquitous third-party technology (Postgres, Redis, Sidekiq, New Relic…)
-  may keep its real name when it isn't identifying; when it is — or when
-  the source is private enough that even the stack narrows it down — swap
-  it for something of the same shape (a job queue stays a job queue, an
-  APM stays an APM). Same-shaped matters: the mechanism must survive.
+- Third-party services default to their **generic type**: "the job queue",
+  "the database", "a cache", "our APM" — not Sidekiq, Postgres, Redis,
+  New Relic. This is a puzzle rule as much as an obfuscation rule: a real
+  product name imports priors the text doesn't control (a reader who knows
+  Sidekiq gets "threaded worker pool" for free; one who doesn't gets
+  nothing), so difficulty starts varying by stack familiarity instead of
+  by the clues. The swap must be same-shaped — the mechanism has to
+  survive in the generic description.
+- Name a specific product only when it's load-bearing: the mechanism is
+  product-specific and a generic swap would be dishonest (a Redis eviction
+  quirk, an S3 outage), or the source is public and the named tech is part
+  of the recognizable story. Note the exception in your worksheet.
 - Keep the swap consistent across all fields, postmortem included.
 
 ## Credits
