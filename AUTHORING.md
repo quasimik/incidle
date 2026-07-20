@@ -96,6 +96,17 @@ knowledgeable reader hold?
 - **Autocomplete form of the same rule:** catalog vocabulary is fine when it
   seeds several candidates; banned when only the answer's row would surface
   in the search box. Compounds count ("health checks" ~ "Auto-healing").
+- **A red herring must still be alive when the clues start.** If the free
+  text both raises the wrong theory and hands over the evidence against it
+  ("support blames the vendor — but it only hits big merchants and passes
+  on retry"), the player gets the refutation for free and the misdirection
+  never functions. Raising a theory is free-text work; disproving it is
+  clue work, and it should cost an hour.
+- **Clues end on observations, not deductions.** Deliver the evidence and
+  stop — "the calls that do run come back fast", not "…so it isn't the
+  model." The inference is the player's job; narration that grades its own
+  evidence plays the game for them. A fallible character may voice an
+  interpretation; the clue itself shouldn't certify one.
 - **Self-test:** run candidate discovery on topology + vignette alone. You
   want a genuine spread, with the answer not ranked first before the clues
   have done their work. The cold playtest is the live version of this test —
@@ -132,6 +143,8 @@ knowledgeable reader hold?
 - [ ] Topology + vignette alone yields a candidate spread; answer not
       conspicuous by presence *or* absence
 - [ ] No differential autocomplete overlap in the pre-decisive text
+- [ ] Red herrings survive the free text — their refutations live in clues
+- [ ] Every pre-decisive clue ends on an observation, not a deduction
 - [ ] Field lengths inside the measured ranges, register consistent
 - [ ] Postmortem covers mechanism + signature + remediation
 - [ ] No `sev`; `author` only if a guest wrote it; `inspiration` if there
